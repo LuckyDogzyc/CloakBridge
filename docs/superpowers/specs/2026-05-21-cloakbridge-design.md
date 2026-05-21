@@ -69,6 +69,14 @@ Supported workflow:
 13. App restores sensitive terms locally.
 14. WebUI shows restored answer by default and hides sanitized answer in a review/details view.
 
+Batch and cross-file workflow:
+
+- A job may contain multiple uploaded files.
+- All files in the same job must share one token mapping vault.
+- The same original sensitive term must map to the same sanitized value across all files in that job.
+- Project-level dictionaries may make the same term map consistently across multiple jobs in the same project.
+- Cross-file requests such as "compare content in one document with rows in one spreadsheet", "check whether anything is missing", or "remove all items from a subnet" should be executed locally against parsed document structures and the encrypted vault. External AI may receive sanitized summaries, but not raw sensitive terms.
+
 ## Sensitive Entity Categories
 
 The first version should support these categories:
@@ -183,10 +191,19 @@ Token format should be readable and stable:
 Properties:
 
 - Same original term should map to the same token inside a project when appropriate.
+- Same original term must map to the same token across all files in one upload job.
 - Different entity types should use different token families.
 - Mappings must be stored in an encrypted local vault.
 - Restoration must happen locally.
 - The WebUI must default to showing restored content, not sanitized content.
+
+IP and subnet handling:
+
+- IP addresses and CIDR ranges are structured sensitive entities.
+- Default IP tokenization may use `<IP_001>` and `<SUBNET_001>` style tokens.
+- For workflows that need subnet relationships, the app should support a reversible shape-preserving IP mode. In that mode, raw IPs and CIDRs are replaced with consistent pseudonymous IP-like values from non-company ranges, while the true mapping stays only in the local vault.
+- Shape-preserving IP mode must keep repeated IPs and repeated subnets consistent across files in the same job.
+- Operations such as "remove this subnet" should be resolved locally using the original-to-pseudonym mapping and parsed document locations.
 
 For external AI responses:
 

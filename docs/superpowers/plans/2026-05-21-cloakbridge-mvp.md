@@ -18,6 +18,8 @@ This plan implements the first working software slice from the design spec:
 - Public-repo-safe project structure and ignore rules.
 - Rule and dictionary detection for Chinese-heavy office content.
 - Tokenization and restoration.
+- Shared token mapping across every file in a single upload job.
+- Reversible IP/subnet handling, including future shape-preserving pseudonymous IP mode.
 - `.txt`, `.docx`, and `.xlsx` sanitization with style preservation tests.
 - Leakage guard before outbound model calls.
 - Provider adapter interface with OpenAI-compatible, Anthropic-compatible, GLM, MiniMax, DeepSeek, Qwen/Tongyi, OpenRouter, and custom endpoint config shapes.
@@ -466,6 +468,8 @@ git commit -m "feat: add local storage and encrypted mapping vault"
 - Create: `/Users/luckydog/Documents/LocalEncrypter/backend/cloakbridge/domain/entities.py`
 - Create: `/Users/luckydog/Documents/LocalEncrypter/backend/cloakbridge/domain/tokens.py`
 - Test: `/Users/luckydog/Documents/LocalEncrypter/backend/tests/test_tokens.py`
+
+Design note for follow-up implementation: one `TokenMap` instance represents a job-level mapping and must be shared across all files in that job. Later file processors and API routes must not create one independent token map per file when handling a multi-file upload.
 
 - [ ] **Step 1: Write token tests**
 
@@ -1057,6 +1061,8 @@ git commit -m "feat: compose local detection pipeline"
 - Create: `/Users/luckydog/Documents/LocalEncrypter/backend/cloakbridge/documents/__init__.py`
 - Create: `/Users/luckydog/Documents/LocalEncrypter/backend/cloakbridge/documents/txt_processor.py`
 - Test: `/Users/luckydog/Documents/LocalEncrypter/backend/tests/test_txt_processor.py`
+
+Design note for multi-file processing: callers must pass the same `TokenMap` to each file processor in one job so repeated terms across `.txt`, `.docx`, and `.xlsx` receive the same sanitized value.
 
 - [ ] **Step 1: Write TXT processor tests**
 
@@ -1665,6 +1671,8 @@ git commit -m "feat: define safe model provider boundary"
 - Create: `/Users/luckydog/Documents/LocalEncrypter/backend/cloakbridge/api/routes.py`
 - Create: `/Users/luckydog/Documents/LocalEncrypter/backend/cloakbridge/main.py`
 - Test: `/Users/luckydog/Documents/LocalEncrypter/backend/tests/test_api_flow.py`
+
+Design note for API evolution: the MVP text route may start with one text payload, but the job model must evolve toward one shared job token map for multiple files. Cross-file comparison and "remove subnet" requests should be implemented as local operations over parsed findings and vault mappings before any sanitized AI request is sent.
 
 - [ ] **Step 1: Write API flow test**
 
