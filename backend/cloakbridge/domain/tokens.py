@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from cloakbridge.domain.entities import Finding
@@ -24,9 +25,12 @@ class TokenMap:
         return token
 
     def restore(self, text: str) -> str:
-        restored = text
-        for token, original in sorted(
-            self.token_to_original.items(), key=lambda item: -len(item[0])
-        ):
-            restored = restored.replace(token, original)
-        return restored
+        if not self.token_to_original:
+            return text
+        pattern = re.compile(
+            "|".join(
+                re.escape(token)
+                for token in sorted(self.token_to_original, key=len, reverse=True)
+            )
+        )
+        return pattern.sub(lambda match: self.token_to_original[match.group(0)], text)
