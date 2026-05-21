@@ -25,8 +25,14 @@ outputs/
 !backend/tests/fixtures/**/*.docx
 !backend/tests/fixtures/**/*.xlsx
 !backend/tests/fixtures/**/*.xlsm
+!backend/tests/templates/**/*.docx
+!backend/tests/templates/**/*.xlsx
+!backend/tests/templates/**/*.xlsm
 !docs/samples/**/*.docx
 !docs/samples/**/*.xlsx
 !docs/samples/**/*.xlsm
+!docs/templates/**/*.docx
+!docs/templates/**/*.xlsx
+!docs/templates/**/*.xlsm
 mapping*.json
 *.key
