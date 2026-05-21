@@ -21,5 +21,11 @@ outputs/
 *.docx
 *.xlsx
 *.xlsm
+!backend/tests/fixtures/**/*.docx
+!backend/tests/fixtures/**/*.xlsx
+!backend/tests/fixtures/**/*.xlsm
+!docs/samples/**/*.docx
+!docs/samples/**/*.xlsx
+!docs/samples/**/*.xlsm
 mapping*.json
 *.key
