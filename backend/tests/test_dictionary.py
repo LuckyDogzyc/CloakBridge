@@ -26,3 +26,37 @@ def test_dictionary_matcher_ignores_pending_and_ignored_entries():
     )
 
     assert matcher.detect("待确认项目和普通词都不应自动脱敏。") == []
+
+
+def test_dictionary_matcher_prefers_longest_overlapping_match_even_if_it_starts_later():
+    matcher = DictionaryMatcher(
+        [
+            DictionaryEntry("abcde", EntityType.CUSTOM, "global", "confirmed"),
+            DictionaryEntry("bcdefgh", EntityType.PROJECT, "project", "confirmed"),
+        ]
+    )
+
+    findings = matcher.detect("abcdefgh")
+
+    assert [(finding.entity_type, finding.text) for finding in findings] == [
+        (EntityType.PROJECT, "bcdefgh")
+    ]
+
+
+def test_dictionary_matcher_handles_duplicate_entries_once_per_span():
+    matcher = DictionaryMatcher(
+        [
+            DictionaryEntry("华东三期项目", EntityType.PROJECT, "project", "confirmed"),
+            DictionaryEntry("华东三期项目", EntityType.PROJECT, "project", "confirmed"),
+        ]
+    )
+
+    findings = matcher.detect("华东三期项目")
+
+    assert [(finding.entity_type, finding.text) for finding in findings] == [
+        (EntityType.PROJECT, "华东三期项目")
+    ]
+
+
+def test_dictionary_matcher_empty_entries_returns_no_findings():
+    assert DictionaryMatcher([]).detect("华东三期项目") == []

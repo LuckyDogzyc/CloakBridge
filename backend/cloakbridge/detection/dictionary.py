@@ -43,10 +43,19 @@ class DictionaryMatcher:
         return self._prefer_longest(findings)
 
     def _prefer_longest(self, findings: list[Finding]) -> list[Finding]:
-        ordered = sorted(findings, key=lambda item: (item.start, -(item.end - item.start)))
+        ordered = sorted(
+            findings,
+            key=lambda item: (
+                -(item.end - item.start),
+                item.start,
+                item.text,
+                item.entity_type,
+                item.source,
+            ),
+        )
         accepted: list[Finding] = []
         for finding in ordered:
             if any(finding.overlaps(existing) for existing in accepted):
                 continue
             accepted.append(finding)
-        return accepted
+        return sorted(accepted, key=lambda item: (item.start, item.end, item.text))
