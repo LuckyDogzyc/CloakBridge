@@ -16,7 +16,10 @@ class RegexRule:
 class RegexDetector:
     def __init__(self) -> None:
         self.rules = [
-            RegexRule(EntityType.URL, re.compile(r"https?://[^\s，。；;）)]+")),
+            RegexRule(
+                EntityType.URL,
+                re.compile(r"https?://[^\s，。；;：:！!？?、）)\]\}]+"),
+            ),
             RegexRule(
                 EntityType.EMAIL,
                 re.compile(
@@ -27,7 +30,7 @@ class RegexDetector:
             ),
             RegexRule(
                 EntityType.IP_ADDRESS,
-                re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\d.])"),
+                re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\d./])"),
             ),
             RegexRule(EntityType.MOBILE_PHONE, re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")),
             RegexRule(
@@ -64,7 +67,9 @@ class RegexDetector:
             )
 
     def _valid_ip(self, value: str) -> bool:
-        ip = value.split("/", 1)[0]
+        ip, separator, cidr = value.partition("/")
+        if separator and not (cidr.isdigit() and 0 <= int(cidr) <= 32):
+            return False
         return all(0 <= int(part) <= 255 for part in ip.split("."))
 
     def _dedupe_overlaps(self, findings: list[Finding]) -> list[Finding]:
