@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+
+
+_SAFE_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class MappingVault:
@@ -16,12 +20,17 @@ class MappingVault:
     def save(self, job_id: str, token_map: dict[str, str]) -> None:
         payload = json.dumps(token_map, ensure_ascii=False).encode("utf-8")
         encrypted = self.fernet.encrypt(payload)
-        (self.vault_dir / f"{job_id}.bin").write_bytes(encrypted)
+        self._path_for_job(job_id).write_bytes(encrypted)
 
     def load(self, job_id: str) -> dict[str, str]:
-        encrypted = (self.vault_dir / f"{job_id}.bin").read_bytes()
+        encrypted = self._path_for_job(job_id).read_bytes()
         payload = self.fernet.decrypt(encrypted)
         return json.loads(payload.decode("utf-8"))
+
+    def _path_for_job(self, job_id: str) -> Path:
+        if not _SAFE_JOB_ID_PATTERN.fullmatch(job_id):
+            raise ValueError("Invalid vault job id")
+        return self.vault_dir / f"{job_id}.bin"
 
     def _load_or_create_key(self) -> bytes:
         if self.key_path.exists():
