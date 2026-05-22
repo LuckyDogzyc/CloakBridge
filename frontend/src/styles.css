@@ -142,6 +142,7 @@ button {
 }
 
 .toolbar button,
+.ghost-action,
 .selection-tools button,
 .form-actions button {
   background: #ffffff;
@@ -155,6 +156,7 @@ button {
 }
 
 .toolbar button:hover,
+.ghost-action:hover,
 .selection-tools button:hover,
 .form-actions button:hover {
   border-color: #8c9a86;
@@ -165,6 +167,11 @@ button {
   background: #234a42;
   border-color: #234a42;
   color: #ffffff;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .grid {
@@ -471,6 +478,45 @@ select {
   color: #394037;
   font-size: 12px;
   padding: 3px 6px;
+}
+
+.file-list,
+.validation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.file-list > span,
+.validation-list span {
+  background: #eef0ed;
+  border: 1px solid #dde1d8;
+  border-radius: 5px;
+  color: #394037;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.job-result {
+  border-top: 1px solid #e1e3dc;
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.job-result strong {
+  font-size: 13px;
+}
+
+.job-result span {
+  color: #62675f;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.validation-list {
+  margin: 10px 0;
 }
 
 @media (max-width: 980px) {

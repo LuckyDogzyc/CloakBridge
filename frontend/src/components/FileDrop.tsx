@@ -2,17 +2,20 @@ import type { RefObject } from "react";
 
 type FileDropProps = {
   inputRef?: RefObject<HTMLTextAreaElement>;
+  onFilesSelected: (files: File[]) => void;
   onChange: (value: string) => void;
   onUseSelection: () => void;
   value: string;
 };
 
-export function FileDrop({ inputRef, value, onChange, onUseSelection }: FileDropProps) {
+export function FileDrop({ inputRef, value, onChange, onFilesSelected, onUseSelection }: FileDropProps) {
   async function handleFiles(files: FileList | null) {
     const firstFile = files?.[0];
     if (!firstFile) return;
+    onFilesSelected(Array.from(files));
     if (firstFile.name.toLowerCase().endsWith(".txt")) {
-      onChange(await firstFile.text());
+      const text = typeof firstFile.text === "function" ? await firstFile.text() : await new Response(firstFile).text();
+      onChange(text);
     }
   }
 

@@ -4,8 +4,12 @@ import {
   createAliasGroup,
   listAliasGroups,
   sanitizeText,
+  sanitizeFiles,
+  validateResponse,
   type AliasGroup,
+  type FileJobResult,
   type Finding,
+  type ValidationResult,
 } from "./api/client";
 import { FileDrop } from "./components/FileDrop";
 import { FindingsReview } from "./components/FindingsReview";
@@ -27,6 +31,9 @@ export function App() {
   const [sanitized, setSanitized] = useState("");
   const [restored, setRestored] = useState("");
   const [tokenMap, setTokenMap] = useState<Record<string, string>>({});
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileJob, setFileJob] = useState<FileJobResult | null>(null);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
 
   const replacementByOriginal = useMemo(() => {
     return Object.fromEntries(Object.entries(tokenMap).map(([token, original]) => [original, token]));
@@ -46,6 +53,19 @@ export function App() {
     setSanitized(result.sanitized_text);
     setRestored(text);
     setTokenMap(result.token_map);
+  }
+
+  async function runFileSanitize() {
+    if (selectedFiles.length === 0) return;
+    const result = await sanitizeFiles(selectedFiles);
+    setFileJob(result);
+    setTokenMap(result.token_map);
+  }
+
+  async function runResponseValidation() {
+    const result = await validateResponse(sanitized, tokenMap);
+    setValidation(result);
+    setRestored(result.restored_text);
   }
 
   function toggleFinding(key: string, enabled: boolean) {
@@ -98,9 +118,11 @@ export function App() {
             <FileDrop
               inputRef={textAreaRef}
               onChange={setText}
+              onFilesSelected={setSelectedFiles}
               onUseSelection={addSelectionAsFinding}
               value={text}
             />
+            <FileJobPanel files={selectedFiles} job={fileJob} onRun={runFileSanitize} />
             <ReviewHighlighter
               activeKeys={activeKeys}
               findingKey={findingKey}
@@ -114,13 +136,58 @@ export function App() {
               onToggle={toggleFinding}
               replacementByOriginal={replacementByOriginal}
             />
-            <ResponseViewer restored={restored} sanitized={sanitized} />
+            <ResponseViewer
+              onValidate={() => void runResponseValidation()}
+              restored={restored}
+              sanitized={sanitized}
+              validation={validation}
+            />
           </div>
         </>
       ) : null}
       {activeView === "dictionary" ? <DictionaryView /> : null}
       {activeView === "models" ? <ModelsView /> : null}
     </Shell>
+  );
+}
+
+function FileJobPanel({
+  files,
+  job,
+  onRun,
+}: {
+  files: File[];
+  job: FileJobResult | null;
+  onRun: () => Promise<void>;
+}) {
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <h2>文件任务</h2>
+          <p>多个文件共用同一个映射字典。</p>
+        </div>
+        <button className="ghost-action" disabled={files.length === 0} onClick={() => void onRun()} type="button">
+          处理文件
+        </button>
+      </div>
+      <div className="file-list">
+        {files.map((file) => (
+          <span key={`${file.name}-${file.size}`}>{file.name}</span>
+        ))}
+        {files.length === 0 ? <div className="empty-state">选择 txt/docx/xlsx 后会出现在这里。</div> : null}
+      </div>
+      {job ? (
+        <div className="job-result">
+          <strong>任务 {job.job_id.slice(0, 8)}</strong>
+          {job.files.map((file) => (
+            <span key={file.output_path}>
+              {`${file.filename} -> ${file.output_path}`}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

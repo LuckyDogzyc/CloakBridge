@@ -57,6 +57,39 @@ test("dictionary view creates a local alias group", async () => {
   expect(screen.getByText("西调搬迁")).toBeInTheDocument();
 });
 
+test("review view sends selected files to local file job", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/jobs/sanitize-files") {
+        return new Response(
+          JSON.stringify({
+            job_id: "job-12345678",
+            files: [{ filename: "input.txt", output_path: "/local/output/input.txt", finding_count: 2 }],
+            token_map: { "[[PRJ:001#001]]": "西调工程" },
+            token_prompt: "rules",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ findings: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+
+  render(<App />);
+
+  const file = new File(["西调工程"], "input.txt", { type: "text/plain" });
+  fireEvent.change(screen.getByLabelText("上传附件"), { target: { files: [file] } });
+  await waitFor(() => expect(screen.getByText("input.txt")).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole("button", { name: "处理文件" }));
+  await waitFor(() => expect(screen.getByText(/job-1234/)).toBeInTheDocument());
+  expect(screen.getByText(/\/local\/output\/input.txt/)).toBeInTheDocument();
+});
+
 test("review view exposes upload, highlighted text, and replacement map", async () => {
   vi.stubGlobal(
     "fetch",
@@ -102,6 +135,17 @@ test("review view exposes upload, highlighted text, and replacement map", async 
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
+      if (url === "/api/validate-response") {
+        return new Response(
+          JSON.stringify({
+            unknown_tokens: [],
+            malformed_tokens: [],
+            generic_tokens: ["[[PRJ:001]]"],
+            restored_text: "西调工程项目服务器10.18.2.4 测试123456",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       return new Response("not found", { status: 404 });
     }),
   );
@@ -125,4 +169,7 @@ test("review view exposes upload, highlighted text, and replacement map", async 
   );
   expect(screen.getByText("[[PRJ:001#001]]")).toBeInTheDocument();
   expect(screen.getByText("[[IP:A.B.C.004]]")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "校验" }));
+  await waitFor(() => expect(screen.getByText("泛指 1")).toBeInTheDocument());
 });
