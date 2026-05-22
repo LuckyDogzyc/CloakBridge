@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "../src/App";
 
 test("renders CloakBridge review workspace", () => {
@@ -157,7 +157,67 @@ test("review view sends selected files to local file job", async () => {
   expect(screen.getByText(/\/local\/output\/input.txt/)).toBeInTheDocument();
   expect(screen.getAllByText("西调工程").length).toBeGreaterThan(0);
   expect(screen.getAllByText("10.18.2.18").length).toBeGreaterThan(0);
-  expect(screen.getByText("[[PRJ:001#001]]服务器[[IP:A.B.C.018]]")).toBeInTheDocument();
+  expect(screen.getByLabelText("脱敏外发内容")).toHaveValue("[[PRJ:001#001]]服务器[[IP:A.B.C.018]]");
+});
+
+test("review view groups duplicate findings and toggles them together", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/analyze-text") {
+        return new Response(
+          JSON.stringify({
+            findings: [
+              { text: "12306.cn", entity_type: "DOMAIN", start: 0, end: 8, source: "regex", confidence: 1 },
+              { text: "12306.cn", entity_type: "DOMAIN", start: 11, end: 19, source: "regex", confidence: 1 },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/sanitize-text") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.findings).toEqual([]);
+        return new Response(JSON.stringify({ sanitized_text: body.text, token_map: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ alias_groups: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+
+  render(<App />);
+  fireEvent.change(screen.getByLabelText("本地内容"), { target: { value: "12306.cn 和 12306.cn" } });
+  fireEvent.click(screen.getByRole("button", { name: "分析" }));
+
+  await waitFor(() => expect(screen.getByText("出现 2 次")).toBeInTheDocument());
+  const reviewPanel = screen.getByRole("region", { name: "敏感项审阅" });
+  expect(within(reviewPanel).getAllByText("12306.cn")).toHaveLength(1);
+
+  fireEvent.click(screen.getByLabelText("12306.cn DOMAIN 出现 2 次"));
+  fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
+});
+
+test("review view provides an AI task composer after sanitized content exists", async () => {
+  render(<App />);
+
+  fireEvent.change(screen.getByLabelText("给外部大模型的任务"), {
+    target: { value: "提取模板，并把正文改成写作指导" },
+  });
+
+  expect(screen.getByText("外发请求会在脱敏后生成。")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("脱敏外发内容"), {
+    target: { value: "[[PRJ:001#001]]服务器[[IP:A.B.C.004]]" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "生成外发请求" }));
+
+  const outboundPreview = screen.getByLabelText("脱敏外发请求预览");
+  expect(outboundPreview).toHaveTextContent("提取模板，并把正文改成写作指导");
+  expect(outboundPreview).toHaveTextContent("[[PRJ:001#001]]服务器[[IP:A.B.C.004]]");
 });
 
 test("review view merges selected project findings into one alias group before sanitizing", async () => {
@@ -305,6 +365,6 @@ test("review view exposes upload, highlighted text, and replacement map", async 
   expect(screen.getByText("[[PRJ:001#001]]")).toBeInTheDocument();
   expect(screen.getByText("[[IP:A.B.C.004]]")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "校验" }));
+  fireEvent.click(screen.getByRole("button", { name: "校验回复" }));
   await waitFor(() => expect(screen.getByText("泛指 1")).toBeInTheDocument());
 });

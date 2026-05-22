@@ -41,6 +41,16 @@ def test_regex_detector_url_stops_at_ascii_punctuation():
     assert all("后续" not in finding.text for finding in findings)
 
 
+def test_regex_detector_url_stops_before_chinese_description_without_punctuation():
+    findings = RegexDetector().detect(
+        "http://epay.12306.cn/pay/wapResponseC2银行端配置修改建行将支付平台的支付结果通知地址"
+    )
+    found = {(finding.entity_type, finding.text) for finding in findings}
+
+    assert (EntityType.URL, "http://epay.12306.cn/pay/wapResponseC2") in found
+    assert all("银行端" not in finding.text for finding in findings)
+
+
 def test_regex_detector_suppresses_domain_inside_url_but_keeps_standalone_domain():
     findings = RegexDetector().detect(
         "访问https://secure.example.com/path，备用secure.example.com。"

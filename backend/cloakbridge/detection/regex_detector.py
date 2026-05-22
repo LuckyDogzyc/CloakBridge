@@ -18,7 +18,7 @@ class RegexDetector:
         self.rules = [
             RegexRule(
                 EntityType.URL,
-                re.compile(r"https?://[^\s，。；;：:！!？?、）)\]\}]+"),
+                re.compile(r"https?://[A-Za-z0-9._~:/?#\[\]@$&'()*+,;=%-]+"),
             ),
             RegexRule(
                 EntityType.EMAIL,

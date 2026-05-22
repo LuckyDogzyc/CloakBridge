@@ -305,7 +305,7 @@ select:focus {
   border-radius: 7px;
   display: grid;
   gap: 8px;
-  grid-template-columns: 20px minmax(120px, 1fr) auto auto auto;
+  grid-template-columns: 20px minmax(120px, 1fr) auto auto auto auto;
   min-height: 42px;
   padding: 8px 10px;
 }
@@ -333,6 +333,11 @@ code,
   font-size: 12px;
 }
 
+.occurrence-count {
+  color: #62675f;
+  font-size: 12px;
+}
+
 .replacement-token {
   background: #f1f6eb;
   color: #234a42;
@@ -346,6 +351,26 @@ code,
   border-radius: 7px;
   line-height: 1.75;
   min-height: 94px;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.ai-workbench h3 {
+  font-size: 13px;
+  margin: 14px 0 8px;
+}
+
+.outbound-preview {
+  background: #15171b;
+  border-radius: 7px;
+  color: #eef0ed;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  margin-top: 12px;
+  max-height: 260px;
+  overflow: auto;
   padding: 12px;
   white-space: pre-wrap;
 }
@@ -445,6 +470,10 @@ select {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.split-actions {
+  gap: 8px;
 }
 
 .alias-list {
@@ -614,6 +643,7 @@ select {
   }
 
   .finding-row small,
+  .occurrence-count,
   .replacement-token {
     grid-column: 2 / -1;
   }
