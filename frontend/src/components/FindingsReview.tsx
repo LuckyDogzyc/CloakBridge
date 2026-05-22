@@ -41,27 +41,23 @@ export function FindingsReview({
       {mergeStatus ? <div className="status-note">{mergeStatus}</div> : null}
       <div className="finding-list">
         {groups.map((group) => {
-          const firstFinding = group.findings[0].finding;
           const allEnabled = group.findings.every((entry) => activeKeys[entry.key] !== false);
           const replacement = replacementByOriginal[group.text] ?? "待生成";
           return (
-          <label className="finding-row" key={`${group.entity_type}:${group.text}`}>
-            <input
-              aria-label={`${group.text} ${group.entity_type} 出现 ${group.findings.length} 次`}
-              checked={allEnabled}
-              onChange={(event) => {
+            <button
+              aria-pressed={allEnabled}
+              className={`finding-token ${allEnabled ? "selected" : ""}`}
+              key={`${group.entity_type}:${group.text}`}
+              onClick={() => {
                 for (const entry of group.findings) {
-                  onToggle(entry.key, event.target.checked);
+                  onToggle(entry.key, !allEnabled);
                 }
               }}
-              type="checkbox"
-            />
-            <span className="finding-text">{group.text}</span>
-            <code>{group.entity_type}</code>
-            <small>{firstFinding.source}</small>
-            <span className="occurrence-count">出现 {group.findings.length} 次</span>
-            <span className="replacement-token">{replacement}</span>
-          </label>
+              type="button"
+            >
+              <span>{group.text}</span>
+              <code>{replacement}</code>
+            </button>
           );
         })}
         {findings.length === 0 ? <div className="empty-state">运行分析后，候选敏感项会出现在这里。</div> : null}

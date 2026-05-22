@@ -6,7 +6,9 @@ test("renders CloakBridge review workspace", () => {
   render(<App />);
   expect(screen.getByText("CloakBridge")).toBeInTheDocument();
   expect(screen.getByText("敏感项审阅")).toBeInTheDocument();
+  expect(screen.getByText("外部模型对话")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "高亮审阅" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "本地内容" })).not.toBeInTheDocument();
 });
 
 test("opens dictionary and model views from sidebar", async () => {
@@ -112,7 +114,7 @@ test("dictionary view creates a local alias group", async () => {
   expect(screen.getByText("西调搬迁")).toBeInTheDocument();
 });
 
-test("review view sends selected files to local file job", async () => {
+test("review view automatically processes selected files and shows them in the chat composer", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -152,8 +154,8 @@ test("review view sends selected files to local file job", async () => {
   fireEvent.change(screen.getByLabelText("上传附件"), { target: { files: [file] } });
   await waitFor(() => expect(screen.getByText("input.txt")).toBeInTheDocument());
 
-  fireEvent.click(screen.getByRole("button", { name: "处理文件" }));
   await waitFor(() => expect(screen.getByText(/job-1234/)).toBeInTheDocument());
+  expect(screen.queryByRole("button", { name: "处理文件" })).not.toBeInTheDocument();
   expect(screen.getByText(/\/local\/output\/input.txt/)).toBeInTheDocument();
   expect(screen.getAllByText("西调工程").length).toBeGreaterThan(0);
   expect(screen.getAllByText("10.18.2.18").length).toBeGreaterThan(0);
@@ -191,18 +193,20 @@ test("review view groups duplicate findings and toggles them together", async ()
   );
 
   render(<App />);
-  fireEvent.change(screen.getByLabelText("本地内容"), { target: { value: "12306.cn 和 12306.cn" } });
+  fireEvent.change(screen.getByLabelText("脱敏审阅纯文本"), { target: { value: "12306.cn 和 12306.cn" } });
   fireEvent.click(screen.getByRole("button", { name: "分析" }));
 
-  await waitFor(() => expect(screen.getByText("出现 2 次")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("button", { name: "12306.cn 待生成" })).toBeInTheDocument());
   const reviewPanel = screen.getByRole("region", { name: "敏感项审阅" });
   expect(within(reviewPanel).getAllByText("12306.cn")).toHaveLength(1);
+  expect(within(reviewPanel).queryByText("DOMAIN")).not.toBeInTheDocument();
+  expect(within(reviewPanel).queryByText("regex")).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByLabelText("12306.cn DOMAIN 出现 2 次"));
+  fireEvent.click(screen.getByRole("button", { name: "12306.cn 待生成" }));
   fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
 });
 
-test("review view provides an AI task composer after sanitized content exists", async () => {
+test("review view sends sanitized chat messages and keeps sanitized replies folded", async () => {
   render(<App />);
 
   fireEvent.change(screen.getByLabelText("给外部大模型的任务"), {
@@ -213,11 +217,14 @@ test("review view provides an AI task composer after sanitized content exists", 
   fireEvent.change(screen.getByLabelText("脱敏外发内容"), {
     target: { value: "[[PRJ:001#001]]服务器[[IP:A.B.C.004]]" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "生成外发请求" }));
-
   const outboundPreview = screen.getByLabelText("脱敏外发请求预览");
   expect(outboundPreview).toHaveTextContent("提取模板，并把正文改成写作指导");
   expect(outboundPreview).toHaveTextContent("[[PRJ:001#001]]服务器[[IP:A.B.C.004]]");
+
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(screen.getAllByText("提取模板，并把正文改成写作指导").length).toBeGreaterThan(0);
+  expect(screen.getByText("已生成脱敏请求，等待模型网关发送。")).toBeInTheDocument();
+  expect(screen.getAllByText("查看脱敏回复").length).toBeGreaterThan(0);
 });
 
 test("review view merges selected project findings into one alias group before sanitizing", async () => {
@@ -274,7 +281,7 @@ test("review view merges selected project findings into one alias group before s
 
   render(<App />);
 
-  fireEvent.change(screen.getByLabelText("本地内容"), { target: { value: "西调工程和西调搬迁" } });
+  fireEvent.change(screen.getByLabelText("脱敏审阅纯文本"), { target: { value: "西调工程和西调搬迁" } });
   fireEvent.click(screen.getByRole("button", { name: "分析" }));
   await waitFor(() => expect(screen.getByText("西调搬迁")).toBeInTheDocument());
 
@@ -348,14 +355,15 @@ test("review view exposes upload, highlighted text, and replacement map", async 
   render(<App />);
 
   expect(screen.getByText("上传附件")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("本地内容"), {
+  fireEvent.change(screen.getByLabelText("脱敏审阅纯文本"), {
     target: { value: "西调工程项目服务器10.18.2.4 测试123456" },
   });
   fireEvent.click(screen.getByRole("button", { name: "分析" }));
 
   await waitFor(() => expect(screen.getAllByText("西调工程项目").length).toBeGreaterThan(0));
   expect(screen.getAllByText("10.18.2.4").length).toBeGreaterThan(0);
-  expect(screen.getByText("local_ai:heuristic")).toBeInTheDocument();
+  const reviewPanel = screen.getByRole("region", { name: "敏感项审阅" });
+  expect(within(reviewPanel).queryByText("local_ai:heuristic")).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
 

@@ -12,7 +12,6 @@ import {
   type Finding,
   type ValidationResult,
 } from "./api/client";
-import { FileDrop } from "./components/FileDrop";
 import { FindingsReview } from "./components/FindingsReview";
 import { ProviderPanel } from "./components/ProviderPanel";
 import { ResponseViewer } from "./components/ResponseViewer";
@@ -30,7 +29,6 @@ export function App() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [activeKeys, setActiveKeys] = useState<Record<string, boolean>>({});
   const [sanitized, setSanitized] = useState("");
-  const [restored, setRestored] = useState("");
   const [tokenMap, setTokenMap] = useState<Record<string, string>>({});
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [fileJob, setFileJob] = useState<FileJobResult | null>(null);
@@ -52,13 +50,13 @@ export function App() {
     const selectedFindings = findings.filter((finding, index) => activeKeys[findingKey(finding, index)] !== false);
     const result = await sanitizeText(text, selectedFindings, reviewAliasGroups);
     setSanitized(result.sanitized_text);
-    setRestored(text);
     setTokenMap(result.token_map);
   }
 
-  async function runFileSanitize() {
-    if (selectedFiles.length === 0) return;
-    const result = await sanitizeFiles(selectedFiles);
+  async function runFileSanitize(files: File[]) {
+    if (files.length === 0) return;
+    setSelectedFiles(files);
+    const result = await sanitizeFiles(files);
     setFileJob(result);
     setTokenMap(result.token_map);
     const firstPreview = result.files[0];
@@ -67,15 +65,17 @@ export function App() {
       setFindings(firstPreview.findings);
       activateFindings(firstPreview.findings);
       setSanitized(firstPreview.sanitized_preview);
-      setRestored(firstPreview.preview_text);
       setValidation(null);
     }
+  }
+
+  function handleFilesSelected(files: File[]) {
+    void runFileSanitize(files);
   }
 
   async function runResponseValidation() {
     const result = await validateResponse(sanitized, tokenMap);
     setValidation(result);
-    setRestored(result.restored_text);
   }
 
   function toggleFinding(key: string, enabled: boolean) {
@@ -149,81 +149,51 @@ export function App() {
             </div>
           </div>
           <div className="grid">
-            <FileDrop
-              inputRef={textAreaRef}
-              onChange={setText}
-              onFilesSelected={setSelectedFiles}
-              onUseSelection={addSelectionAsFinding}
-              value={text}
-            />
-            <FileJobPanel files={selectedFiles} job={fileJob} onRun={runFileSanitize} />
-            <ReviewHighlighter
-              activeKeys={activeKeys}
-              findingKey={findingKey}
-              findings={findings}
-              text={text}
-            />
-            <FindingsReview
-              activeKeys={activeKeys}
-              findingKey={findingKey}
-              findings={findings}
-              mergeStatus={mergeStatus}
-              onMergeSelected={() => void mergeSelectedFindings()}
-              onToggle={toggleFinding}
-              replacementByOriginal={replacementByOriginal}
-            />
             <ResponseViewer
+              files={selectedFiles}
+              job={fileJob}
+              onFilesSelected={handleFilesSelected}
               onValidate={() => void runResponseValidation()}
-              restored={restored}
               sanitized={sanitized}
               validation={validation}
             />
+            <section className="review-column">
+              <div className="review-text-editor">
+                <div className="review-editor-header">
+                  <span>脱敏审阅纯文本</span>
+                  <button className="ghost-action" onClick={addSelectionAsFinding} type="button">
+                    加入脱敏
+                  </button>
+                </div>
+                <textarea
+                  aria-label="脱敏审阅纯文本"
+                  ref={textAreaRef}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                />
+              </div>
+              <ReviewHighlighter
+                activeKeys={activeKeys}
+                findingKey={findingKey}
+                findings={findings}
+                text={text}
+              />
+              <FindingsReview
+                activeKeys={activeKeys}
+                findingKey={findingKey}
+                findings={findings}
+                mergeStatus={mergeStatus}
+                onMergeSelected={() => void mergeSelectedFindings()}
+                onToggle={toggleFinding}
+                replacementByOriginal={replacementByOriginal}
+              />
+            </section>
           </div>
         </>
       ) : null}
       {activeView === "dictionary" ? <DictionaryView /> : null}
       {activeView === "models" ? <ModelsView /> : null}
     </Shell>
-  );
-}
-
-function FileJobPanel({
-  files,
-  job,
-  onRun,
-}: {
-  files: File[];
-  job: FileJobResult | null;
-  onRun: () => Promise<void>;
-}) {
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <div>
-          <h2>文件任务</h2>
-          <p>多个文件共用同一个映射字典。</p>
-        </div>
-        <button className="ghost-action" disabled={files.length === 0} onClick={() => void onRun()} type="button">
-          处理文件
-        </button>
-      </div>
-      <div className="file-list">
-        {files.map((file) => (
-          <span key={`${file.name}-${file.size}`}>{file.name}</span>
-        ))}
-        {files.length === 0 ? <div className="empty-state">选择 txt/docx/xlsx 后会出现在这里。</div> : null}
-      </div>
-      {job ? (
-        <div className="job-result">
-          <strong>任务 {job.job_id.slice(0, 8)}</strong>
-          {job.files.map((file) => (
-            <span key={file.output_path}>
-              {`${file.filename} -> ${file.output_path} / ${file.finding_count} 项`}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </section>
   );
 }
 
