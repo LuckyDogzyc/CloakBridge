@@ -61,3 +61,11 @@ def test_regex_detector_rejects_invalid_ip_octets_and_cidr():
     assert (EntityType.IP_ADDRESS, "256.0.0.1") not in found
     assert (EntityType.IP_ADDRESS, "999.1.1.1") not in found
     assert (EntityType.IP_ADDRESS, "10.0.0.1/99") not in found
+
+
+def test_regex_detector_finds_ip_prefix_and_host_range_requests():
+    findings = RegexDetector().detect("把10.18.2开头的都列出来，再处理10.18.2.18-90。")
+    found = {(finding.entity_type, finding.text) for finding in findings}
+
+    assert (EntityType.IP_PREFIX, "10.18.2") in found
+    assert (EntityType.IP_RANGE, "10.18.2.18-90") in found

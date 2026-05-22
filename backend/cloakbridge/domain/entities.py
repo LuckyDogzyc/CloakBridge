@@ -11,6 +11,8 @@ class EntityType(StrEnum):
     PROJECT = "PROJECT"
     PROJECT_CODE = "PROJECT_CODE"
     IP_ADDRESS = "IP_ADDRESS"
+    IP_PREFIX = "IP_PREFIX"
+    IP_RANGE = "IP_RANGE"
     HOSTNAME = "HOSTNAME"
     DOMAIN = "DOMAIN"
     URL = "URL"
@@ -30,6 +32,8 @@ class EntityType(StrEnum):
     def token_family(self) -> str:
         return {
             EntityType.IP_ADDRESS: "IP",
+            EntityType.IP_PREFIX: "IP_PREFIX",
+            EntityType.IP_RANGE: "IP_RANGE",
             EntityType.MOBILE_PHONE: "PHONE",
             EntityType.LANDLINE: "PHONE",
             EntityType.NATIONAL_ID: "ID",

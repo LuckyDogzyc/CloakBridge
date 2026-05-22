@@ -53,11 +53,13 @@ test("review view exposes upload, highlighted text, and replacement map", async 
         expect(body.text).toContain("西调工程项目");
         return new Response(
           JSON.stringify({
-            sanitized_text: "xxx项目服务器aa.bb.cc.dd 测试123456",
+            sanitized_text: "[[PRJ:001#001]]服务器[[IP:A.B.C.004]] 测试123456",
             token_map: {
-              "xxx项目": "西调工程项目",
-              "aa.bb.cc.dd": "10.18.2.4",
+              "[[PRJ:001]]": "西调工程项目",
+              "[[PRJ:001#001]]": "西调工程项目",
+              "[[IP:A.B.C.004]]": "10.18.2.4",
             },
+            token_prompt: "token rules",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -80,7 +82,9 @@ test("review view exposes upload, highlighted text, and replacement map", async 
 
   fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
 
-  await waitFor(() => expect(screen.getByText("xxx项目服务器aa.bb.cc.dd 测试123456")).toBeInTheDocument());
-  expect(screen.getByText("xxx项目")).toBeInTheDocument();
-  expect(screen.getByText("aa.bb.cc.dd")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByText("[[PRJ:001#001]]服务器[[IP:A.B.C.004]] 测试123456")).toBeInTheDocument(),
+  );
+  expect(screen.getByText("[[PRJ:001#001]]")).toBeInTheDocument();
+  expect(screen.getByText("[[IP:A.B.C.004]]")).toBeInTheDocument();
 });

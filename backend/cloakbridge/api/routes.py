@@ -12,6 +12,7 @@ from cloakbridge.detection.regex_detector import RegexDetector
 from cloakbridge.documents.txt_processor import TxtProcessor
 from cloakbridge.domain.entities import EntityType, Finding
 from cloakbridge.domain.tokens import TokenMap
+from cloakbridge.gateway.token_prompt import build_token_handling_prompt
 
 router = APIRouter(prefix="/api")
 
@@ -59,13 +60,17 @@ def analyze_text(request: AnalyzeTextRequest) -> dict[str, object]:
 
 @router.post("/sanitize-text")
 def sanitize_text(request: SanitizeTextRequest) -> dict[str, object]:
-    token_map = TokenMap(replacement_style="readable")
+    token_map = TokenMap(replacement_style="structured")
     findings = [
         Finding(item.text, item.entity_type, item.start, item.end, item.source, item.confidence)
         for item in request.findings
     ]
     sanitized_text = TxtProcessor().replace_text(request.text, findings, token_map)
-    return {"sanitized_text": sanitized_text, "token_map": token_map.token_to_original}
+    return {
+        "sanitized_text": sanitized_text,
+        "token_map": token_map.token_to_original,
+        "token_prompt": build_token_handling_prompt(token_map.token_to_original),
+    }
 
 
 @router.post("/restore-text")

@@ -29,6 +29,14 @@ class RegexDetector:
                 ),
             ),
             RegexRule(
+                EntityType.IP_RANGE,
+                re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}-\d{1,3}(?![\d.-])"),
+            ),
+            RegexRule(
+                EntityType.IP_PREFIX,
+                re.compile(r"(?<![\d.])(?:\d{1,3}\.){2}\d{1,3}(?=开头|段|网段|范围)"),
+            ),
+            RegexRule(
                 EntityType.IP_ADDRESS,
                 re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\d./])"),
             ),
@@ -57,6 +65,10 @@ class RegexDetector:
         for match in rule.pattern.finditer(text):
             if rule.entity_type is EntityType.IP_ADDRESS and not self._valid_ip(match.group()):
                 continue
+            if rule.entity_type is EntityType.IP_PREFIX and not self._valid_ip_prefix(match.group()):
+                continue
+            if rule.entity_type is EntityType.IP_RANGE and not self._valid_ip_range(match.group()):
+                continue
             yield Finding(
                 text=match.group(),
                 entity_type=rule.entity_type,
@@ -71,6 +83,18 @@ class RegexDetector:
         if separator and not (cidr.isdigit() and 0 <= int(cidr) <= 32):
             return False
         return all(0 <= int(part) <= 255 for part in ip.split("."))
+
+    def _valid_ip_prefix(self, value: str) -> bool:
+        parts = value.split(".")
+        return len(parts) == 3 and all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
+
+    def _valid_ip_range(self, value: str) -> bool:
+        start_ip, separator, end_host = value.partition("-")
+        if not separator or not end_host.isdigit() or not self._valid_ip(start_ip):
+            return False
+        start = int(start_ip.split(".")[-1])
+        end = int(end_host)
+        return 0 <= end <= 255 and start <= end
 
     def _dedupe_overlaps(self, findings: list[Finding]) -> list[Finding]:
         ordered = sorted(findings, key=lambda item: (item.start, -(item.end - item.start)))
