@@ -15,6 +15,13 @@ export type AliasGroup = {
   scope: string;
 };
 
+export type AliasGroupInput = {
+  aliases: string[];
+  canonical: string;
+  entity_type: string;
+  scope?: string;
+};
+
 export type FileJobResult = {
   job_id: string;
   files: {
@@ -43,11 +50,11 @@ export async function analyzeText(text: string) {
   return (await response.json()) as { findings: Finding[] };
 }
 
-export async function sanitizeText(text: string, findings: Finding[]) {
+export async function sanitizeText(text: string, findings: Finding[], alias_groups: AliasGroupInput[] = []) {
   const response = await fetch("/api/sanitize-text", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, findings }),
+    body: JSON.stringify({ text, findings, alias_groups }),
   });
   if (!response.ok) throw new Error("脱敏失败");
   return (await response.json()) as {
@@ -63,12 +70,7 @@ export async function listAliasGroups() {
   return (await response.json()) as { alias_groups: AliasGroup[] };
 }
 
-export async function createAliasGroup(input: {
-  aliases: string[];
-  canonical: string;
-  entity_type: string;
-  scope?: string;
-}) {
+export async function createAliasGroup(input: AliasGroupInput) {
   const response = await fetch("/api/alias-groups", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

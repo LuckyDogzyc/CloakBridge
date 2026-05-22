@@ -4,6 +4,8 @@ type FindingsReviewProps = {
   activeKeys: Record<string, boolean>;
   findingKey: (finding: Finding, index: number) => string;
   findings: Finding[];
+  mergeStatus?: string;
+  onMergeSelected: () => void;
   onToggle: (key: string, enabled: boolean) => void;
   replacementByOriginal: Record<string, string>;
 };
@@ -12,6 +14,8 @@ export function FindingsReview({
   activeKeys,
   findingKey,
   findings,
+  mergeStatus,
+  onMergeSelected,
   onToggle,
   replacementByOriginal,
 }: FindingsReviewProps) {
@@ -22,7 +26,11 @@ export function FindingsReview({
           <h2>敏感项审阅</h2>
           <p>确认、排除或补充需要脱敏的内容。</p>
         </div>
+        <button className="ghost-action" onClick={onMergeSelected} type="button">
+          合并为同一实体
+        </button>
       </div>
+      {mergeStatus ? <div className="status-note">{mergeStatus}</div> : null}
       <div className="finding-list">
         {findings.map((finding, index) => (
           <label className="finding-row" key={findingKey(finding, index)}>

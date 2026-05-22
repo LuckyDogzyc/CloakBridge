@@ -7,6 +7,7 @@ import {
   sanitizeFiles,
   validateResponse,
   type AliasGroup,
+  type AliasGroupInput,
   type FileJobResult,
   type Finding,
   type ValidationResult,
@@ -34,6 +35,8 @@ export function App() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [fileJob, setFileJob] = useState<FileJobResult | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [reviewAliasGroups, setReviewAliasGroups] = useState<AliasGroupInput[]>([]);
+  const [mergeStatus, setMergeStatus] = useState("");
 
   const replacementByOriginal = useMemo(() => {
     return Object.fromEntries(Object.entries(tokenMap).map(([token, original]) => [original, token]));
@@ -49,7 +52,7 @@ export function App() {
 
   async function runSanitize() {
     const selectedFindings = findings.filter((finding, index) => activeKeys[findingKey(finding, index)] !== false);
-    const result = await sanitizeText(text, selectedFindings);
+    const result = await sanitizeText(text, selectedFindings, reviewAliasGroups);
     setSanitized(result.sanitized_text);
     setRestored(text);
     setTokenMap(result.token_map);
@@ -70,6 +73,26 @@ export function App() {
 
   function toggleFinding(key: string, enabled: boolean) {
     setActiveKeys((current) => ({ ...current, [key]: enabled }));
+  }
+
+  async function mergeSelectedFindings() {
+    const selectedProjectTexts = findings
+      .filter((finding, index) => activeKeys[findingKey(finding, index)] !== false)
+      .filter((finding) => finding.entity_type === "PROJECT")
+      .map((finding) => finding.text);
+    const aliases = Array.from(new Set(selectedProjectTexts));
+    if (aliases.length < 2) {
+      setMergeStatus("至少选择 2 个项目候选项");
+      return;
+    }
+    const group: AliasGroupInput = {
+      aliases,
+      canonical: aliases[0],
+      entity_type: "PROJECT",
+    };
+    await createAliasGroup(group);
+    setReviewAliasGroups((current) => [...current, group]);
+    setMergeStatus(`已合并 ${aliases.length} 个别名`);
   }
 
   function addSelectionAsFinding() {
@@ -133,6 +156,8 @@ export function App() {
               activeKeys={activeKeys}
               findingKey={findingKey}
               findings={findings}
+              mergeStatus={mergeStatus}
+              onMergeSelected={() => void mergeSelectedFindings()}
               onToggle={toggleFinding}
               replacementByOriginal={replacementByOriginal}
             />

@@ -90,6 +90,71 @@ test("review view sends selected files to local file job", async () => {
   expect(screen.getByText(/\/local\/output\/input.txt/)).toBeInTheDocument();
 });
 
+test("review view merges selected project findings into one alias group before sanitizing", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/analyze-text") {
+        return new Response(
+          JSON.stringify({
+            findings: [
+              { text: "西调工程", entity_type: "PROJECT", start: 0, end: 4, source: "manual", confidence: 1 },
+              { text: "西调搬迁", entity_type: "PROJECT", start: 12, end: 16, source: "manual", confidence: 1 },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/alias-groups" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.canonical).toBe("西调工程");
+        expect(body.aliases).toEqual(["西调工程", "西调搬迁"]);
+        return new Response(
+          JSON.stringify({
+            id: 2,
+            entity_type: "PROJECT",
+            canonical: "西调工程",
+            aliases: ["西调工程", "西调搬迁"],
+            scope: "project",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/sanitize-text") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.alias_groups[0].aliases).toEqual(["西调工程", "西调搬迁"]);
+        return new Response(
+          JSON.stringify({
+            sanitized_text: "[[PRJ:001#001]]和[[PRJ:001#002]]",
+            token_map: {
+              "[[PRJ:001]]": "西调工程",
+              "[[PRJ:001#001]]": "西调工程",
+              "[[PRJ:001#002]]": "西调搬迁",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ alias_groups: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+
+  render(<App />);
+
+  fireEvent.change(screen.getByLabelText("本地内容"), { target: { value: "西调工程和西调搬迁" } });
+  fireEvent.click(screen.getByRole("button", { name: "分析" }));
+  await waitFor(() => expect(screen.getByText("西调搬迁")).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole("button", { name: "合并为同一实体" }));
+  await waitFor(() => expect(screen.getByText("已合并 2 个别名")).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
+  await waitFor(() => expect(screen.getByText("[[PRJ:001#001]]和[[PRJ:001#002]]")).toBeInTheDocument());
+});
+
 test("review view exposes upload, highlighted text, and replacement map", async () => {
   vi.stubGlobal(
     "fetch",
