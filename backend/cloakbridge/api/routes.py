@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from cloakbridge.detection.dictionary import DictionaryEntry, DictionaryMatcher
-from cloakbridge.detection.local_ai import DisabledLocalAI
+from cloakbridge.detection.local_ai import HeuristicChineseLocalAI
 from cloakbridge.detection.pipeline import DetectionPipeline
 from cloakbridge.detection.regex_detector import RegexDetector
 from cloakbridge.documents.txt_processor import TxtProcessor
@@ -52,14 +52,14 @@ def analyze_text(request: AnalyzeTextRequest) -> dict[str, object]:
         DictionaryEntry(item.text, item.entity_type, item.scope, "confirmed")
         for item in request.dictionary
     ]
-    pipeline = DetectionPipeline(RegexDetector(), DictionaryMatcher(entries), DisabledLocalAI())
+    pipeline = DetectionPipeline(RegexDetector(), DictionaryMatcher(entries), HeuristicChineseLocalAI())
     findings = pipeline.detect(request.text)
     return {"findings": [asdict(finding) for finding in findings]}
 
 
 @router.post("/sanitize-text")
 def sanitize_text(request: SanitizeTextRequest) -> dict[str, object]:
-    token_map = TokenMap()
+    token_map = TokenMap(replacement_style="readable")
     findings = [
         Finding(item.text, item.entity_type, item.start, item.end, item.source, item.confidence)
         for item in request.findings
@@ -70,7 +70,14 @@ def sanitize_text(request: SanitizeTextRequest) -> dict[str, object]:
 
 @router.post("/restore-text")
 def restore_text(request: RestoreTextRequest) -> dict[str, str]:
-    restored = request.sanitized_text
-    for token, original in sorted(request.token_map.items(), key=lambda item: -len(item[0])):
-        restored = restored.replace(token, original)
+    restored = _restore_once(request.sanitized_text, request.token_map)
     return {"restored_text": restored}
+
+
+def _restore_once(text: str, token_map: dict[str, str]) -> str:
+    import re
+
+    if not token_map:
+        return text
+    pattern = re.compile("|".join(re.escape(token) for token in sorted(token_map, key=len, reverse=True)))
+    return pattern.sub(lambda match: token_map[match.group(0)], text)
