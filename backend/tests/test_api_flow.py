@@ -135,3 +135,36 @@ def test_api_persists_alias_groups_in_local_store(tmp_path, monkeypatch):
     assert listed.status_code == 200
     assert listed.json()["alias_groups"] == [created.json()]
     assert (tmp_path / "cloakbridge.sqlite").exists()
+
+
+def test_api_saves_lists_and_tests_local_model_configs(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOAKBRIDGE_DATA_DIR", str(tmp_path))
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/model-configs",
+        json={
+            "name": "MiniMax 生产网关",
+            "provider": "minimax",
+            "model": "MiniMax-M1",
+            "base_url": "https://api.minimax.chat/v1",
+            "api_key": "sk-local-secret",
+        },
+    )
+
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["name"] == "MiniMax 生产网关"
+    assert payload["masked_api_key"] == "sk-****cret"
+    assert "api_key" not in payload
+
+    database_bytes = (tmp_path / "cloakbridge.sqlite").read_bytes()
+    assert b"sk-local-secret" not in database_bytes
+
+    listed = client.get("/api/model-configs")
+    assert listed.status_code == 200
+    assert listed.json()["model_configs"] == [payload]
+
+    tested = client.post(f"/api/model-configs/{payload['id']}/test")
+    assert tested.status_code == 200
+    assert tested.json()["ok"] is True

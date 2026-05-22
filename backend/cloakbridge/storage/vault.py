@@ -27,10 +27,23 @@ class MappingVault:
         payload = self.fernet.decrypt(encrypted)
         return json.loads(payload.decode("utf-8"))
 
+    def save_secret(self, secret_id: str, value: str) -> None:
+        encrypted = self.fernet.encrypt(value.encode("utf-8"))
+        self._path_for_secret(secret_id).write_bytes(encrypted)
+
+    def load_secret(self, secret_id: str) -> str:
+        encrypted = self._path_for_secret(secret_id).read_bytes()
+        return self.fernet.decrypt(encrypted).decode("utf-8")
+
     def _path_for_job(self, job_id: str) -> Path:
         if not _SAFE_JOB_ID_PATTERN.fullmatch(job_id):
             raise ValueError("Invalid vault job id")
         return self.vault_dir / f"{job_id}.bin"
+
+    def _path_for_secret(self, secret_id: str) -> Path:
+        if not _SAFE_JOB_ID_PATTERN.fullmatch(secret_id):
+            raise ValueError("Invalid vault secret id")
+        return self.vault_dir / f"secret-{secret_id}.bin"
 
     def _load_or_create_key(self) -> bytes:
         if self.key_path.exists():

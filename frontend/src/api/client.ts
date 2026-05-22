@@ -40,6 +40,24 @@ export type ValidationResult = {
   restored_text: string;
 };
 
+export type ModelConfig = {
+  id: number;
+  name: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  masked_api_key: string;
+  enabled: boolean;
+};
+
+export type ModelConfigInput = {
+  name: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  api_key: string;
+};
+
 export async function analyzeText(text: string) {
   const response = await fetch("/api/analyze-text", {
     method: "POST",
@@ -100,4 +118,28 @@ export async function validateResponse(sanitized_text: string, token_map: Record
   });
   if (!response.ok) throw new Error("校验失败");
   return (await response.json()) as ValidationResult;
+}
+
+export async function listModelConfigs() {
+  const response = await fetch("/api/model-configs");
+  if (!response.ok) throw new Error("读取模型配置失败");
+  return (await response.json()) as { model_configs: ModelConfig[] };
+}
+
+export async function createModelConfig(input: ModelConfigInput) {
+  const response = await fetch("/api/model-configs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error("保存模型配置失败");
+  return (await response.json()) as ModelConfig;
+}
+
+export async function testModelConfig(id: number) {
+  const response = await fetch(`/api/model-configs/${id}/test`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("测试连接失败");
+  return (await response.json()) as { ok: boolean; message: string };
 }

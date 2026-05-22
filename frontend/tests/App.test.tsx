@@ -9,7 +9,7 @@ test("renders CloakBridge review workspace", () => {
   expect(screen.getByRole("heading", { name: "高亮审阅" })).toBeInTheDocument();
 });
 
-test("opens dictionary and model views from sidebar", () => {
+test("opens dictionary and model views from sidebar", async () => {
   render(<App />);
 
   fireEvent.click(screen.getByRole("button", { name: "词库" }));
@@ -17,6 +17,61 @@ test("opens dictionary and model views from sidebar", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "模型" }));
   expect(screen.getByRole("heading", { name: "模型网关" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("模型配置暂时无法读取")).toBeInTheDocument());
+});
+
+test("model view saves and tests a local provider config", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/model-configs" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.provider).toBe("glm");
+        expect(body.model).toBe("glm-4-flash");
+        expect(body.api_key).toBe("sk-local-secret");
+        return new Response(
+          JSON.stringify({
+            id: 7,
+            name: "智谱主模型",
+            provider: "glm",
+            model: "glm-4-flash",
+            base_url: "https://open.bigmodel.cn/api/paas/v4",
+            masked_api_key: "sk-****cret",
+            enabled: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/model-configs/7/test") {
+        return new Response(JSON.stringify({ ok: true, message: "配置可用" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ model_configs: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "模型" }));
+
+  fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "智谱主模型" } });
+  fireEvent.change(screen.getByLabelText("模型供应商"), { target: { value: "glm" } });
+  fireEvent.change(screen.getByLabelText("模型 ID"), { target: { value: "glm-4-flash" } });
+  fireEvent.change(screen.getByLabelText("Base URL"), {
+    target: { value: "https://open.bigmodel.cn/api/paas/v4" },
+  });
+  fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-local-secret" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+
+  await waitFor(() => expect(screen.getByText("智谱主模型")).toBeInTheDocument());
+  expect(screen.getByText("sk-****cret")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+  await waitFor(() => expect(screen.getByText("配置可用")).toBeInTheDocument());
 });
 
 test("dictionary view creates a local alias group", async () => {

@@ -8,7 +8,7 @@ import re
 from uuid import uuid4
 from zipfile import ZipFile
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from lxml import etree
 from openpyxl import load_workbook
 from pydantic import BaseModel
@@ -23,7 +23,9 @@ from cloakbridge.documents.xlsx_processor import XlsxProcessor
 from cloakbridge.domain.entities import EntityType, Finding
 from cloakbridge.domain.tokens import TokenMap
 from cloakbridge.gateway.token_prompt import build_token_handling_prompt
+from cloakbridge.gateway.providers import ProviderConfig
 from cloakbridge.storage.sqlite_store import SQLiteStore
+from cloakbridge.storage.vault import MappingVault
 
 router = APIRouter(prefix="/api")
 
@@ -85,6 +87,14 @@ class ValidateResponseRequest(RestoreTextRequest):
     pass
 
 
+class ModelConfigCreateRequest(BaseModel):
+    name: str
+    provider: str
+    model: str
+    base_url: str = ""
+    api_key: str = ""
+
+
 @router.post("/analyze-text")
 def analyze_text(request: AnalyzeTextRequest) -> dict[str, object]:
     entries = [
@@ -111,6 +121,56 @@ def create_alias_group(request: AliasGroupCreateRequest) -> dict[str, object]:
 def list_alias_groups(scope: str | None = None) -> dict[str, object]:
     store = _local_store()
     return {"alias_groups": store.list_alias_groups(scope)}
+
+
+@router.post("/model-configs")
+def create_model_config(request: ModelConfigCreateRequest) -> dict[str, object]:
+    try:
+        ProviderConfig(provider=request.provider, model=request.model, base_url=request.base_url or None)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    store = _local_store()
+    config = store.create_model_config(
+        name=request.name.strip(),
+        provider=request.provider,
+        model=request.model.strip(),
+        base_url=request.base_url.strip(),
+    )
+    if request.api_key.strip():
+        secret_ref = f"model-config-{config['id']}"
+        _local_vault().save_secret(secret_ref, request.api_key.strip())
+        config = store.update_model_config_secret(
+            int(config["id"]),
+            secret_ref,
+            _mask_api_key(request.api_key.strip()),
+        )
+    return _public_model_config(config)
+
+
+@router.get("/model-configs")
+def list_model_configs() -> dict[str, object]:
+    store = _local_store()
+    return {"model_configs": [_public_model_config(config) for config in store.list_model_configs()]}
+
+
+@router.post("/model-configs/{config_id}/test")
+def test_model_config(config_id: int) -> dict[str, object]:
+    store = _local_store()
+    try:
+        config = store.get_model_config(config_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Model config not found") from error
+
+    if not config["model"]:
+        raise HTTPException(status_code=400, detail="Model id is required")
+    if not config["base_url"]:
+        raise HTTPException(status_code=400, detail="Base URL is required")
+    if not config["secret_ref"]:
+        raise HTTPException(status_code=400, detail="API key is required")
+
+    _local_vault().load_secret(str(config["secret_ref"]))
+    return {"ok": True, "message": "配置可用", "provider": config["provider"], "model": config["model"]}
 
 
 @router.post("/sanitize-text")
@@ -209,8 +269,30 @@ def _local_store() -> SQLiteStore:
     return store
 
 
+def _local_vault() -> MappingVault:
+    return MappingVault(_data_dir() / "vault")
+
+
 def _data_dir() -> Path:
     return Path(os.environ.get("CLOAKBRIDGE_DATA_DIR", ".local-data")).resolve()
+
+
+def _mask_api_key(api_key: str) -> str:
+    if len(api_key) <= 8:
+        return f"{api_key[:2]}****"
+    return f"{api_key[:3]}****{api_key[-4:]}"
+
+
+def _public_model_config(config: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": config["id"],
+        "name": config["name"],
+        "provider": config["provider"],
+        "model": config["model"],
+        "base_url": config["base_url"],
+        "masked_api_key": config["masked_api_key"],
+        "enabled": config["enabled"],
+    }
 
 
 def _parse_alias_groups(payload: str) -> list[AliasGroupIn]:

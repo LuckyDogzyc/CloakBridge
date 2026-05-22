@@ -53,6 +53,22 @@ class SQLiteStore:
             """
         )
         self.connection.execute(
+            """
+            create table if not exists model_configs (
+              id integer primary key autoincrement,
+              name text not null,
+              provider text not null,
+              model text not null,
+              base_url text not null default '',
+              secret_ref text,
+              masked_api_key text not null default '未设置',
+              enabled integer not null default 1,
+              created_at text not null default current_timestamp,
+              updated_at text not null default current_timestamp
+            )
+            """
+        )
+        self.connection.execute(
             "create index if not exists idx_dictionary_scope_status on dictionary_entries(scope, status)"
         )
         self.connection.execute(
@@ -60,6 +76,9 @@ class SQLiteStore:
         )
         self.connection.execute(
             "create index if not exists idx_alias_entries_text_status on alias_entries(text, status)"
+        )
+        self.connection.execute(
+            "create index if not exists idx_model_configs_provider_enabled on model_configs(provider, enabled)"
         )
         self.connection.commit()
 
@@ -106,6 +125,63 @@ class SQLiteStore:
         ).fetchall()
         return [self._alias_group_from_row(row) for row in rows]
 
+    def create_model_config(
+        self,
+        name: str,
+        provider: str,
+        model: str,
+        base_url: str,
+        secret_ref: str | None = None,
+        masked_api_key: str = "未设置",
+        enabled: bool = True,
+    ) -> dict[str, Any]:
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                insert into model_configs
+                  (name, provider, model, base_url, secret_ref, masked_api_key, enabled)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name, provider, model, base_url, secret_ref, masked_api_key, int(enabled)),
+            )
+            config_id = int(cursor.lastrowid)
+        return self.get_model_config(config_id)
+
+    def update_model_config_secret(self, config_id: int, secret_ref: str, masked_api_key: str) -> dict[str, Any]:
+        with self.connection:
+            self.connection.execute(
+                """
+                update model_configs
+                set secret_ref = ?, masked_api_key = ?, updated_at = current_timestamp
+                where id = ?
+                """,
+                (secret_ref, masked_api_key, config_id),
+            )
+        return self.get_model_config(config_id)
+
+    def list_model_configs(self) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            select id, name, provider, model, base_url, secret_ref, masked_api_key, enabled
+            from model_configs
+            order by id
+            """
+        ).fetchall()
+        return [self._model_config_from_row(row) for row in rows]
+
+    def get_model_config(self, config_id: int) -> dict[str, Any]:
+        row = self.connection.execute(
+            """
+            select id, name, provider, model, base_url, secret_ref, masked_api_key, enabled
+            from model_configs
+            where id = ?
+            """,
+            (config_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Model config not found: {config_id}")
+        return self._model_config_from_row(row)
+
     def _alias_group_from_row(self, row: tuple[int, str, str, str]) -> dict[str, Any]:
         group_id, entity_type, canonical, scope = row
         alias_rows = self.connection.execute(
@@ -123,6 +199,19 @@ class SQLiteStore:
             "canonical": canonical,
             "aliases": [alias_row[0] for alias_row in alias_rows],
             "scope": scope,
+        }
+
+    def _model_config_from_row(self, row: tuple[int, str, str, str, str, str | None, str, int]) -> dict[str, Any]:
+        config_id, name, provider, model, base_url, secret_ref, masked_api_key, enabled = row
+        return {
+            "id": config_id,
+            "name": name,
+            "provider": provider,
+            "model": model,
+            "base_url": base_url,
+            "secret_ref": secret_ref,
+            "masked_api_key": masked_api_key,
+            "enabled": bool(enabled),
         }
 
     def _dedupe_aliases(self, aliases: list[str]) -> list[str]:

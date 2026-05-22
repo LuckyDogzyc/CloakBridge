@@ -59,3 +59,21 @@ def test_mapping_vault_rejects_path_traversal_job_id(tmp_path: Path):
         vault.save("../escape", {"<PROJECT_001>": "华东三期项目"})
 
     assert not (tmp_path / "escape.bin").exists()
+
+
+def test_sqlite_store_persists_model_config_without_plain_api_key(tmp_path: Path):
+    store = SQLiteStore(tmp_path / "cloakbridge.sqlite")
+    store.initialize()
+
+    created = store.create_model_config(
+        name="智谱主模型",
+        provider="glm",
+        model="glm-4-flash",
+        base_url="https://open.bigmodel.cn/api/paas/v4",
+        secret_ref="model-config-1",
+    )
+
+    raw_database = (tmp_path / "cloakbridge.sqlite").read_bytes()
+    assert b"sk-secret" not in raw_database
+    assert created["masked_api_key"] == "未设置"
+    assert store.list_model_configs() == [created]

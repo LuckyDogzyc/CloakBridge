@@ -408,6 +408,12 @@ select {
   margin-top: 16px;
 }
 
+.model-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(360px, 1.1fr);
+}
+
 .dictionary-stats {
   align-items: center;
   display: grid;
@@ -446,6 +452,11 @@ select {
   gap: 8px;
 }
 
+.model-list {
+  display: grid;
+  gap: 8px;
+}
+
 .alias-row {
   background: #ffffff;
   border: 1px solid #e1e3dc;
@@ -463,6 +474,40 @@ select {
   color: #62675f;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.model-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e1e3dc;
+  border-radius: 7px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.model-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.model-row strong {
+  font-size: 14px;
+}
+
+.model-row span,
+.status-line {
+  color: #62675f;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.status-line {
+  border-top: 1px solid #e1e3dc;
+  margin-top: 12px;
+  padding-top: 12px;
 }
 
 .alias-tags {
