@@ -15,7 +15,7 @@ export function ReviewHighlighter({ activeKeys, findings, findingKey, text }: Re
       <div className="panel-heading">
         <div>
           <h2>高亮审阅</h2>
-          <p>勾选项会进入脱敏映射，取消勾选则保留原文。</p>
+          <p>纯文本预览用于审阅 docx/xlsx/txt 提取内容，勾选项会进入脱敏映射。</p>
         </div>
       </div>
       <div className="highlight-surface" aria-label="高亮审阅结果">

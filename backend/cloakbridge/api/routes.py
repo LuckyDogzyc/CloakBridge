@@ -214,6 +214,7 @@ async def sanitize_files(
         source.write_bytes(await upload.read())
         text = _extract_file_text(source)
         findings = _pipeline_for_alias_groups(groups).detect(text)
+        sanitized_preview = TxtProcessor().replace_text(text, findings, token_map)
         output = output_dir / filename
         _sanitize_file(source, output, findings, token_map)
         results.append(
@@ -221,6 +222,9 @@ async def sanitize_files(
                 "filename": filename,
                 "output_path": str(output),
                 "finding_count": len(findings),
+                "preview_text": text,
+                "sanitized_preview": sanitized_preview,
+                "findings": [asdict(finding) for finding in findings],
             }
         )
 

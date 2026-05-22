@@ -47,6 +47,13 @@ def test_api_sanitizes_multiple_files_with_shared_token_map(tmp_path: Path, monk
     assert Path(txt_output["output_path"]).read_text(encoding="utf-8") == (
         "[[PRJ:001#001]]服务器[[IP:A.B.C.018]]"
     )
+    assert txt_output["preview_text"] == "西调工程服务器10.18.2.18"
+    assert txt_output["sanitized_preview"] == "[[PRJ:001#001]]服务器[[IP:A.B.C.018]]"
+    assert txt_output["findings"][0]["text"] == "西调工程"
+    assert txt_output["findings"][1]["text"] == "10.18.2.18"
+    assert docx_output["preview_text"] == "复核西调工程"
+    assert docx_output["sanitized_preview"] == "复核[[PRJ:001#001]]"
+    assert docx_output["findings"][0]["text"] == "西调工程"
     assert "[[PRJ:001#001]]" in read_docx_text(Path(docx_output["output_path"]))
     assert load_workbook(Path(xlsx_output["output_path"])).active["A1"].value == "[[PRJ:001#001]]"
 

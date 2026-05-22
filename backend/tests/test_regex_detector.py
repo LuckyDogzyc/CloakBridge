@@ -69,3 +69,20 @@ def test_regex_detector_finds_ip_prefix_and_host_range_requests():
 
     assert (EntityType.IP_PREFIX, "10.18.2") in found
     assert (EntityType.IP_RANGE, "10.18.2.18-90") in found
+
+
+def test_regex_detector_finds_numeric_project_names_without_catching_test_numbers():
+    findings = RegexDetector().detect("12306备用域名实施方案，12306APP，测试123456")
+    found = {(finding.entity_type, finding.text) for finding in findings}
+
+    assert (EntityType.PROJECT, "12306备用域名") in found
+    assert (EntityType.PROJECT, "12306") in found
+    assert all(finding.text != "123456" for finding in findings)
+
+
+def test_regex_detector_finds_numeric_cn_domains_even_when_docx_text_is_concatenated():
+    findings = RegexDetector().detect("12306.cnmobile.12306.cn和12306-backup.cn")
+    found = {(finding.entity_type, finding.text) for finding in findings}
+
+    assert (EntityType.DOMAIN, "12306.cn") in found
+    assert (EntityType.DOMAIN, "12306-backup.cn") in found

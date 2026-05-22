@@ -15,8 +15,8 @@ export function ResponseViewer({
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <h2>回复</h2>
-          <p>默认展示解除脱敏后的文本，脱敏版本折叠保留用于检查。</p>
+          <h2>外发与回复</h2>
+          <p>文件任务先生成脱敏外发预览；AI 返回后再做校验和本地恢复。</p>
         </div>
         <button className="ghost-action" disabled={!sanitized} onClick={onValidate} type="button">
           校验
@@ -31,7 +31,7 @@ export function ResponseViewer({
         </div>
       ) : null}
       <details>
-        <summary>查看脱敏回复</summary>
+        <summary>查看脱敏版本</summary>
         <pre>{sanitized}</pre>
       </details>
     </section>

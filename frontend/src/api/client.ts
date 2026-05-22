@@ -28,6 +28,9 @@ export type FileJobResult = {
     filename: string;
     output_path: string;
     finding_count: number;
+    preview_text: string;
+    sanitized_preview: string;
+    findings: Finding[];
   }[];
   token_map: Record<string, string>;
   token_prompt?: string;

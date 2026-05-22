@@ -45,9 +45,7 @@ export function App() {
   async function runAnalysis() {
     const analysis = await analyzeText(text);
     setFindings(analysis.findings);
-    setActiveKeys(
-      Object.fromEntries(analysis.findings.map((finding, index) => [findingKey(finding, index), true])),
-    );
+    activateFindings(analysis.findings);
   }
 
   async function runSanitize() {
@@ -63,6 +61,15 @@ export function App() {
     const result = await sanitizeFiles(selectedFiles);
     setFileJob(result);
     setTokenMap(result.token_map);
+    const firstPreview = result.files[0];
+    if (firstPreview) {
+      setText(firstPreview.preview_text);
+      setFindings(firstPreview.findings);
+      activateFindings(firstPreview.findings);
+      setSanitized(firstPreview.sanitized_preview);
+      setRestored(firstPreview.preview_text);
+      setValidation(null);
+    }
   }
 
   async function runResponseValidation() {
@@ -73,6 +80,10 @@ export function App() {
 
   function toggleFinding(key: string, enabled: boolean) {
     setActiveKeys((current) => ({ ...current, [key]: enabled }));
+  }
+
+  function activateFindings(nextFindings: Finding[]) {
+    setActiveKeys(Object.fromEntries(nextFindings.map((finding, index) => [findingKey(finding, index), true])));
   }
 
   async function mergeSelectedFindings() {
@@ -207,7 +218,7 @@ function FileJobPanel({
           <strong>任务 {job.job_id.slice(0, 8)}</strong>
           {job.files.map((file) => (
             <span key={file.output_path}>
-              {`${file.filename} -> ${file.output_path}`}
+              {`${file.filename} -> ${file.output_path} / ${file.finding_count} 项`}
             </span>
           ))}
         </div>

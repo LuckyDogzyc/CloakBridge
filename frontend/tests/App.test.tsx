@@ -120,8 +120,20 @@ test("review view sends selected files to local file job", async () => {
         return new Response(
           JSON.stringify({
             job_id: "job-12345678",
-            files: [{ filename: "input.txt", output_path: "/local/output/input.txt", finding_count: 2 }],
-            token_map: { "[[PRJ:001#001]]": "西调工程" },
+            files: [
+              {
+                filename: "input.txt",
+                output_path: "/local/output/input.txt",
+                finding_count: 2,
+                preview_text: "西调工程服务器10.18.2.18",
+                sanitized_preview: "[[PRJ:001#001]]服务器[[IP:A.B.C.018]]",
+                findings: [
+                  { text: "西调工程", entity_type: "PROJECT", start: 0, end: 4, source: "dictionary", confidence: 1 },
+                  { text: "10.18.2.18", entity_type: "IP_ADDRESS", start: 7, end: 17, source: "regex", confidence: 1 },
+                ],
+              },
+            ],
+            token_map: { "[[PRJ:001#001]]": "西调工程", "[[IP:A.B.C.018]]": "10.18.2.18" },
             token_prompt: "rules",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -143,6 +155,9 @@ test("review view sends selected files to local file job", async () => {
   fireEvent.click(screen.getByRole("button", { name: "处理文件" }));
   await waitFor(() => expect(screen.getByText(/job-1234/)).toBeInTheDocument());
   expect(screen.getByText(/\/local\/output\/input.txt/)).toBeInTheDocument();
+  expect(screen.getAllByText("西调工程").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("10.18.2.18").length).toBeGreaterThan(0);
+  expect(screen.getByText("[[PRJ:001#001]]服务器[[IP:A.B.C.018]]")).toBeInTheDocument();
 });
 
 test("review view merges selected project findings into one alias group before sanitizing", async () => {

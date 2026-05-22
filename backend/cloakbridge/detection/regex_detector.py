@@ -46,8 +46,25 @@ class RegexDetector:
                 re.compile(r"(?<![A-Z0-9-])[A-Z]{2,8}-\d{4}-\d{2,6}(?![A-Z0-9-])"),
             ),
             RegexRule(
+                EntityType.PROJECT,
+                re.compile(
+                    r"(?<![A-Za-z0-9])"
+                    r"\d{3,8}[\u4e00-\u9fff]{0,12}?"
+                    r"(?:备用域名|项目|工程|系统|平台|应用|业务)"
+                    r"(?![A-Za-z0-9])"
+                ),
+            ),
+            RegexRule(
+                EntityType.PROJECT,
+                re.compile(r"(?<![A-Za-z0-9])\d{3,8}(?=APP|App|app)"),
+            ),
+            RegexRule(
                 EntityType.CONTRACT,
                 re.compile(r"\b(?:HT|合同|CONTRACT)[-_]?[A-Za-z0-9-]{4,}\b"),
+            ),
+            RegexRule(
+                EntityType.DOMAIN,
+                re.compile(r"(?<![A-Za-z0-9-])\d{3,8}(?:-[A-Za-z0-9]+)?\.cn"),
             ),
             RegexRule(
                 EntityType.DOMAIN,
