@@ -27,6 +27,22 @@ def test_sqlite_store_initializes_dictionary_table(tmp_path: Path):
     assert rows == [("dictionary_entries",)]
 
 
+def test_sqlite_store_persists_alias_groups_without_uploading_sensitive_dictionary(tmp_path: Path):
+    store = SQLiteStore(tmp_path / "cloakbridge.sqlite")
+    store.initialize()
+
+    group = store.create_alias_group(
+        entity_type="PROJECT",
+        canonical="西调工程",
+        aliases=["西调工程", "西调2025工程", "西调搬迁", "2025资源补强"],
+        scope="project",
+    )
+
+    assert group["canonical"] == "西调工程"
+    assert group["aliases"] == ["西调工程", "西调2025工程", "西调搬迁", "2025资源补强"]
+    assert store.list_alias_groups() == [group]
+
+
 def test_mapping_vault_round_trips_encrypted_token_map(tmp_path: Path):
     vault = MappingVault(tmp_path / "vault")
     vault.save("job-1", {"<PROJECT_001>": "华东三期项目"})

@@ -79,3 +79,59 @@ def test_api_preserves_ip_prefix_and_range_structure_in_sanitized_requests():
     assert sanitized.json()["sanitized_text"] == (
         "把[[IP_PREFIX:A.B.C.*]]开头的都列出来，再处理[[IP_RANGE:A.B.C.018-090]]。"
     )
+
+
+def test_api_uses_alias_groups_to_keep_related_project_surfaces_in_one_entity():
+    client = TestClient(app)
+    text = "西调工程服务器10.18.2.18已上线，西调搬迁清单缺少10.18.2.90。"
+    findings = [
+        {"text": "西调工程", "entity_type": "PROJECT", "start": 0, "end": 4, "source": "manual", "confidence": 1},
+        {"text": "10.18.2.18", "entity_type": "IP_ADDRESS", "start": 7, "end": 17, "source": "regex", "confidence": 1},
+        {"text": "西调搬迁", "entity_type": "PROJECT", "start": 21, "end": 25, "source": "manual", "confidence": 1},
+        {"text": "10.18.2.90", "entity_type": "IP_ADDRESS", "start": 29, "end": 39, "source": "regex", "confidence": 1},
+    ]
+
+    sanitized = client.post(
+        "/api/sanitize-text",
+        json={
+            "text": text,
+            "findings": findings,
+            "alias_groups": [
+                {
+                    "entity_type": "PROJECT",
+                    "canonical": "西调工程",
+                    "aliases": ["西调工程", "西调2025工程", "西调搬迁", "2025资源补强"],
+                }
+            ],
+        },
+    )
+
+    assert sanitized.status_code == 200
+    payload = sanitized.json()
+    assert payload["sanitized_text"] == (
+        "[[PRJ:001#001]]服务器[[IP:A.B.C.018]]已上线，[[PRJ:001#003]]清单缺少[[IP:A.B.C.090]]。"
+    )
+    assert payload["token_map"]["[[PRJ:001]]"] == "西调工程"
+
+
+def test_api_persists_alias_groups_in_local_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOAKBRIDGE_DATA_DIR", str(tmp_path))
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/alias-groups",
+        json={
+            "entity_type": "PROJECT",
+            "canonical": "西调工程",
+            "aliases": ["西调工程", "西调2025工程", "西调搬迁", "2025资源补强"],
+            "scope": "project",
+        },
+    )
+
+    assert created.status_code == 200
+    assert created.json()["aliases"] == ["西调工程", "西调2025工程", "西调搬迁", "2025资源补强"]
+
+    listed = client.get("/api/alias-groups")
+    assert listed.status_code == 200
+    assert listed.json()["alias_groups"] == [created.json()]
+    assert (tmp_path / "cloakbridge.sqlite").exists()

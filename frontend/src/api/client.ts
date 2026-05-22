@@ -7,6 +7,14 @@ export type Finding = {
   confidence: number;
 };
 
+export type AliasGroup = {
+  id: number;
+  entity_type: string;
+  canonical: string;
+  aliases: string[];
+  scope: string;
+};
+
 export async function analyzeText(text: string) {
   const response = await fetch("/api/analyze-text", {
     method: "POST",
@@ -24,5 +32,30 @@ export async function sanitizeText(text: string, findings: Finding[]) {
     body: JSON.stringify({ text, findings }),
   });
   if (!response.ok) throw new Error("脱敏失败");
-  return (await response.json()) as { sanitized_text: string; token_map: Record<string, string> };
+  return (await response.json()) as {
+    sanitized_text: string;
+    token_map: Record<string, string>;
+    token_prompt?: string;
+  };
+}
+
+export async function listAliasGroups() {
+  const response = await fetch("/api/alias-groups");
+  if (!response.ok) throw new Error("读取词库失败");
+  return (await response.json()) as { alias_groups: AliasGroup[] };
+}
+
+export async function createAliasGroup(input: {
+  aliases: string[];
+  canonical: string;
+  entity_type: string;
+  scope?: string;
+}) {
+  const response = await fetch("/api/alias-groups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, scope: input.scope ?? "project" }),
+  });
+  if (!response.ok) throw new Error("保存别名组失败");
+  return (await response.json()) as AliasGroup;
 }

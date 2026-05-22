@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import os
+from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -13,6 +15,7 @@ from cloakbridge.documents.txt_processor import TxtProcessor
 from cloakbridge.domain.entities import EntityType, Finding
 from cloakbridge.domain.tokens import TokenMap
 from cloakbridge.gateway.token_prompt import build_token_handling_prompt
+from cloakbridge.storage.sqlite_store import SQLiteStore
 
 router = APIRouter(prefix="/api")
 
@@ -37,9 +40,20 @@ class FindingIn(BaseModel):
     confidence: float
 
 
+class AliasGroupIn(BaseModel):
+    entity_type: EntityType
+    canonical: str
+    aliases: list[str]
+
+
+class AliasGroupCreateRequest(AliasGroupIn):
+    scope: str = "project"
+
+
 class SanitizeTextRequest(BaseModel):
     text: str
     findings: list[FindingIn]
+    alias_groups: list[AliasGroupIn] = []
 
 
 class RestoreTextRequest(BaseModel):
@@ -58,9 +72,28 @@ def analyze_text(request: AnalyzeTextRequest) -> dict[str, object]:
     return {"findings": [asdict(finding) for finding in findings]}
 
 
+@router.post("/alias-groups")
+def create_alias_group(request: AliasGroupCreateRequest) -> dict[str, object]:
+    store = _local_store()
+    return store.create_alias_group(
+        entity_type=request.entity_type.value,
+        canonical=request.canonical,
+        aliases=request.aliases,
+        scope=request.scope,
+    )
+
+
+@router.get("/alias-groups")
+def list_alias_groups(scope: str | None = None) -> dict[str, object]:
+    store = _local_store()
+    return {"alias_groups": store.list_alias_groups(scope)}
+
+
 @router.post("/sanitize-text")
 def sanitize_text(request: SanitizeTextRequest) -> dict[str, object]:
     token_map = TokenMap(replacement_style="structured")
+    for group in request.alias_groups:
+        token_map.register_alias_group(group.entity_type, group.canonical, group.aliases)
     findings = [
         Finding(item.text, item.entity_type, item.start, item.end, item.source, item.confidence)
         for item in request.findings
@@ -86,3 +119,10 @@ def _restore_once(text: str, token_map: dict[str, str]) -> str:
         return text
     pattern = re.compile("|".join(re.escape(token) for token in sorted(token_map, key=len, reverse=True)))
     return pattern.sub(lambda match: token_map[match.group(0)], text)
+
+
+def _local_store() -> SQLiteStore:
+    data_dir = Path(os.environ.get("CLOAKBRIDGE_DATA_DIR", ".local-data")).resolve()
+    store = SQLiteStore(data_dir / "cloakbridge.sqlite")
+    store.initialize()
+    return store

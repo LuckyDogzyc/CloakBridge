@@ -1,5 +1,12 @@
-import { useMemo, useRef, useState } from "react";
-import { analyzeText, sanitizeText, type Finding } from "./api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  analyzeText,
+  createAliasGroup,
+  listAliasGroups,
+  sanitizeText,
+  type AliasGroup,
+  type Finding,
+} from "./api/client";
 import { FileDrop } from "./components/FileDrop";
 import { FindingsReview } from "./components/FindingsReview";
 import { ProviderPanel } from "./components/ProviderPanel";
@@ -118,6 +125,33 @@ export function App() {
 }
 
 function DictionaryView() {
+  const [aliasGroups, setAliasGroups] = useState<AliasGroup[]>([]);
+  const [canonical, setCanonical] = useState("");
+  const [aliasesText, setAliasesText] = useState("");
+
+  useEffect(() => {
+    void listAliasGroups()
+      .then((result) => setAliasGroups(result.alias_groups))
+      .catch(() => setAliasGroups([]));
+  }, []);
+
+  async function saveAliasGroup() {
+    const aliases = aliasesText
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!canonical.trim() || aliases.length === 0) return;
+
+    const created = await createAliasGroup({
+      aliases,
+      canonical: canonical.trim(),
+      entity_type: "PROJECT",
+    });
+    setAliasGroups((current) => [...current, created]);
+    setCanonical("");
+    setAliasesText("");
+  }
+
   return (
     <section className="view-page">
       <div className="workspace-header">
@@ -136,6 +170,57 @@ function DictionaryView() {
           <strong>0</strong>
         </div>
         <div className="empty-state">词库数据将保存在本机，不会提交到 GitHub。</div>
+      </div>
+      <div className="dictionary-layout">
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>新建别名组</h2>
+              <p>把多个叫法归为同一个实体，恢复时仍保留原始写法。</p>
+            </div>
+          </div>
+          <div className="field-stack">
+            <label>
+              <span>规范名称</span>
+              <input value={canonical} onChange={(event) => setCanonical(event.target.value)} />
+            </label>
+            <label>
+              <span>别名</span>
+              <textarea
+                className="compact-textarea"
+                value={aliasesText}
+                onChange={(event) => setAliasesText(event.target.value)}
+                placeholder="每行一个别名，例如：西调工程"
+              />
+            </label>
+          </div>
+          <div className="form-actions">
+            <button className="primary-action" onClick={() => void saveAliasGroup()} type="button">
+              保存别名组
+            </button>
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>本地别名组</h2>
+              <p>这些数据只保存在当前机器。</p>
+            </div>
+          </div>
+          <div className="alias-list">
+            {aliasGroups.map((group) => (
+              <div className="alias-row" key={group.id}>
+                <strong>{group.canonical}</strong>
+                <div className="alias-tags">
+                  {group.aliases.map((alias) => (
+                    <span key={alias}>{alias}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {aliasGroups.length === 0 ? <div className="empty-state">还没有别名组。</div> : null}
+          </div>
+        </section>
       </div>
     </section>
   );

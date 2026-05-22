@@ -19,6 +19,44 @@ test("opens dictionary and model views from sidebar", () => {
   expect(screen.getByRole("heading", { name: "模型网关" })).toBeInTheDocument();
 });
 
+test("dictionary view creates a local alias group", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/alias-groups" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.canonical).toBe("西调工程");
+        return new Response(
+          JSON.stringify({
+            id: 1,
+            entity_type: "PROJECT",
+            canonical: "西调工程",
+            aliases: ["西调工程", "西调2025工程", "西调搬迁", "2025资源补强"],
+            scope: "project",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ alias_groups: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("button", { name: "词库" }));
+  fireEvent.change(screen.getByLabelText("规范名称"), { target: { value: "西调工程" } });
+  fireEvent.change(screen.getByLabelText("别名"), {
+    target: { value: "西调工程\n西调2025工程\n西调搬迁\n2025资源补强" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存别名组" }));
+
+  await waitFor(() => expect(screen.getByText("西调2025工程")).toBeInTheDocument());
+  expect(screen.getByText("西调搬迁")).toBeInTheDocument();
+});
+
 test("review view exposes upload, highlighted text, and replacement map", async () => {
   vi.stubGlobal(
     "fetch",
