@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import type { FileJobResult, ValidationResult } from "../api/client";
+import {
+  listModelConfigs,
+  sendChat,
+  type FileJobResult,
+  type ModelConfig,
+  type ValidationResult,
+} from "../api/client";
 
 type ChatMessage = {
   id: number;
@@ -14,6 +20,7 @@ export function ResponseViewer({
   onFilesSelected,
   onValidate,
   sanitized,
+  tokenMap,
   validation,
 }: {
   files: File[];
@@ -21,10 +28,13 @@ export function ResponseViewer({
   onFilesSelected: (files: File[]) => void;
   onValidate: () => void;
   sanitized: string;
+  tokenMap: Record<string, string>;
   validation?: ValidationResult | null;
 }) {
   const [task, setTask] = useState("");
   const [sanitizedDraft, setSanitizedDraft] = useState(sanitized);
+  const [modelConfigs, setModelConfigs] = useState<ModelConfig[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<number | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 1,
@@ -36,6 +46,19 @@ export function ResponseViewer({
   useEffect(() => {
     setSanitizedDraft(sanitized);
   }, [sanitized]);
+
+  useEffect(() => {
+    void listModelConfigs()
+      .then((result) => {
+        const configs = Array.isArray(result.model_configs) ? result.model_configs : [];
+        if (configs.length === 0) return;
+        setModelConfigs(configs);
+        setSelectedModelId((current) => current ?? configs[0]?.id);
+      })
+      .catch(() => {
+        // Keep the composer usable without model metadata; the backend will report missing config on send.
+      });
+  }, []);
 
   function handleFiles(filesList: FileList | null) {
     const nextFiles = Array.from(filesList ?? []);
@@ -56,19 +79,32 @@ export function ResponseViewer({
     ].join("\n");
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     const prompt = outboundPrompt();
     if (!prompt) return;
-    setMessages((current) => [
-      ...current,
-      { id: current.length + 1, role: "user", text: task.trim(), sanitized: prompt },
-      {
-        id: current.length + 2,
-        role: "assistant",
-        text: "已生成脱敏请求，等待模型网关发送。",
-        sanitized: prompt,
-      },
-    ]);
+    setMessages((current) => [...current, { id: current.length + 1, role: "user", text: task.trim(), sanitized: prompt }]);
+    try {
+      const result = await sendChat(prompt, tokenMap, selectedModelId);
+      setMessages((current) => [
+        ...current,
+        {
+          id: current.length + 1,
+          role: "assistant",
+          text: result.restored_text,
+          sanitized: result.sanitized_text,
+        },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: current.length + 1,
+          role: "assistant",
+          text: error instanceof Error ? error.message : "发送失败",
+          sanitized: prompt,
+        },
+      ]);
+    }
   }
 
   const prompt = outboundPrompt();
@@ -126,6 +162,22 @@ export function ResponseViewer({
               {file.name}
             </span>
           ))}
+          <label className="model-picker">
+            <span>外部模型</span>
+            <select
+              aria-label="外部模型"
+              disabled={modelConfigs.length === 0}
+              value={selectedModelId ?? ""}
+              onChange={(event) => setSelectedModelId(Number(event.target.value))}
+            >
+              {modelConfigs.length === 0 ? <option value="">未配置</option> : null}
+              {modelConfigs.map((config) => (
+                <option key={config.id} value={config.id}>
+                  {`${config.name} / ${config.model}`}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <label>
           <span>给外部大模型的任务</span>

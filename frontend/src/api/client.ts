@@ -43,6 +43,13 @@ export type ValidationResult = {
   restored_text: string;
 };
 
+export type ChatSendResult = {
+  sanitized_text: string;
+  restored_text: string;
+  attachments: string[];
+  validation: ValidationResult;
+};
+
 export type ModelConfig = {
   id: number;
   name: string;
@@ -121,6 +128,19 @@ export async function validateResponse(sanitized_text: string, token_map: Record
   });
   if (!response.ok) throw new Error("校验失败");
   return (await response.json()) as ValidationResult;
+}
+
+export async function sendChat(prompt: string, token_map: Record<string, string>, model_config_id?: number) {
+  const response = await fetch("/api/chat/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, token_map, model_config_id }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(typeof payload.detail === "string" ? payload.detail : "发送失败");
+  }
+  return (await response.json()) as ChatSendResult;
 }
 
 export async function listModelConfigs() {

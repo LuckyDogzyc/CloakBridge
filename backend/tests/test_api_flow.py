@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from cloakbridge.gateway.providers import ProviderResponse
 from cloakbridge.main import app
 
 
@@ -168,3 +169,77 @@ def test_api_saves_lists_and_tests_local_model_configs(tmp_path, monkeypatch):
     tested = client.post(f"/api/model-configs/{payload['id']}/test")
     assert tested.status_code == 200
     assert tested.json()["ok"] is True
+
+
+def test_api_sends_sanitized_prompt_and_restores_model_response(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOAKBRIDGE_DATA_DIR", str(tmp_path))
+
+    def fake_complete(config, sanitized_prompt, leakage_guard):
+        assert "西调工程" not in sanitized_prompt
+        assert "[[PRJ:001#001]]" in sanitized_prompt
+        leakage_guard.assert_safe(sanitized_prompt)
+        return ProviderResponse(
+            sanitized_text="请按[[PRJ:001#001]]模板编写，并检查[[IP:A.B.C.004]]。",
+            attachments=[],
+        )
+
+    monkeypatch.setattr("cloakbridge.api.routes.complete_with_provider", fake_complete)
+    client = TestClient(app)
+    created = client.post(
+        "/api/model-configs",
+        json={
+            "name": "智谱测试",
+            "provider": "glm",
+            "model": "glm-4-flash",
+            "base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "api_key": "sk-local-secret",
+        },
+    )
+    assert created.status_code == 200
+
+    sent = client.post(
+        "/api/chat/send",
+        json={
+            "prompt": "请总结[[PRJ:001#001]]服务器[[IP:A.B.C.004]]",
+            "token_map": {
+                "[[PRJ:001#001]]": "西调工程",
+                "[[IP:A.B.C.004]]": "10.18.2.4",
+            },
+        },
+    )
+
+    assert sent.status_code == 200
+    payload = sent.json()
+    assert payload["sanitized_text"] == "请按[[PRJ:001#001]]模板编写，并检查[[IP:A.B.C.004]]。"
+    assert payload["restored_text"] == "请按西调工程模板编写，并检查10.18.2.4。"
+    assert payload["validation"]["unknown_tokens"] == []
+
+
+def test_api_blocks_chat_send_when_prompt_contains_raw_sensitive_value(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOAKBRIDGE_DATA_DIR", str(tmp_path))
+    client = TestClient(app)
+    created = client.post(
+        "/api/model-configs",
+        json={
+            "name": "智谱测试",
+            "provider": "glm",
+            "model": "glm-4-flash",
+            "base_url": "https://open.bigmodel.cn/api/paas/v4",
+            "api_key": "sk-local-secret",
+        },
+    )
+    assert created.status_code == 200
+
+    sent = client.post(
+        "/api/chat/send",
+        json={
+            "prompt": "请总结西调工程服务器[[IP:A.B.C.004]]",
+            "token_map": {
+                "[[PRJ:001#001]]": "西调工程",
+                "[[IP:A.B.C.004]]": "10.18.2.4",
+            },
+        },
+    )
+
+    assert sent.status_code == 400
+    assert "raw sensitive content" in sent.json()["detail"]

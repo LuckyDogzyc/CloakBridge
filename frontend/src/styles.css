@@ -453,6 +453,19 @@ code {
   white-space: nowrap;
 }
 
+.model-picker {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.model-picker select {
+  max-width: 230px;
+  min-height: 34px;
+}
+
 .composer-actions {
   display: flex;
   gap: 8px;

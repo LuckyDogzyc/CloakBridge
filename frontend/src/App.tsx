@@ -155,6 +155,7 @@ export function App() {
               onFilesSelected={handleFilesSelected}
               onValidate={() => void runResponseValidation()}
               sanitized={sanitized}
+              tokenMap={tokenMap}
               validation={validation}
             />
             <section className="review-column">

@@ -206,8 +206,73 @@ test("review view groups duplicate findings and toggles them together", async ()
   fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
 });
 
-test("review view sends sanitized chat messages and keeps sanitized replies folded", async () => {
+test("review view sends sanitized chat messages and shows restored model replies", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/model-configs") {
+        return new Response(
+          JSON.stringify({
+            model_configs: [
+              {
+                id: 7,
+                name: "智谱主模型",
+                provider: "glm",
+                model: "glm-4.5-air",
+                base_url: "https://open.bigmodel.cn/api/paas/v4",
+                masked_api_key: "sk-****cret",
+                enabled: true,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/sanitize-text") {
+        return new Response(
+          JSON.stringify({
+            sanitized_text: "[[PRJ:001#001]]服务器[[IP:A.B.C.004]]",
+            token_map: {
+              "[[PRJ:001#001]]": "西调工程",
+              "[[IP:A.B.C.004]]": "10.18.2.4",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url === "/api/chat/send") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.prompt).toContain("[[PRJ:001#001]]服务器[[IP:A.B.C.004]]");
+        expect(body.prompt).not.toContain("西调工程");
+        expect(body.token_map).toEqual({
+          "[[PRJ:001#001]]": "西调工程",
+          "[[IP:A.B.C.004]]": "10.18.2.4",
+        });
+        expect(body.model_config_id).toBe(7);
+        return new Response(
+          JSON.stringify({
+            sanitized_text: "请按[[PRJ:001#001]]模板编写，检查[[IP:A.B.C.004]]。",
+            restored_text: "请按西调工程模板编写，检查10.18.2.4。",
+            attachments: [],
+            validation: {
+              unknown_tokens: [],
+              malformed_tokens: [],
+              generic_tokens: [],
+              restored_text: "请按西调工程模板编写，检查10.18.2.4。",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ alias_groups: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+
   render(<App />);
+  await waitFor(() => expect(screen.getByLabelText("外部模型")).toHaveValue("7"));
 
   fireEvent.change(screen.getByLabelText("给外部大模型的任务"), {
     target: { value: "提取模板，并把正文改成写作指导" },
@@ -217,13 +282,17 @@ test("review view sends sanitized chat messages and keeps sanitized replies fold
   fireEvent.change(screen.getByLabelText("脱敏外发内容"), {
     target: { value: "[[PRJ:001#001]]服务器[[IP:A.B.C.004]]" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "脱敏" }));
+  await waitFor(() => expect(screen.getByLabelText("脱敏外发内容")).toHaveValue("[[PRJ:001#001]]服务器[[IP:A.B.C.004]]"));
+
   const outboundPreview = screen.getByLabelText("脱敏外发请求预览");
   expect(outboundPreview).toHaveTextContent("提取模板，并把正文改成写作指导");
   expect(outboundPreview).toHaveTextContent("[[PRJ:001#001]]服务器[[IP:A.B.C.004]]");
 
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   expect(screen.getAllByText("提取模板，并把正文改成写作指导").length).toBeGreaterThan(0);
-  expect(screen.getByText("已生成脱敏请求，等待模型网关发送。")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("请按西调工程模板编写，检查10.18.2.4。")).toBeInTheDocument());
+  expect(screen.getByText("请按[[PRJ:001#001]]模板编写，检查[[IP:A.B.C.004]]。")).toBeInTheDocument();
   expect(screen.getAllByText("查看脱敏回复").length).toBeGreaterThan(0);
 });
 

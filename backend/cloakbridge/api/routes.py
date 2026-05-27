@@ -14,7 +14,7 @@ from openpyxl import load_workbook
 from pydantic import BaseModel
 
 from cloakbridge.detection.dictionary import DictionaryEntry, DictionaryMatcher
-from cloakbridge.detection.local_ai import HeuristicChineseLocalAI
+from cloakbridge.detection.local_ai import DisabledLocalAI, HeuristicChineseLocalAI
 from cloakbridge.detection.pipeline import DetectionPipeline
 from cloakbridge.detection.regex_detector import RegexDetector
 from cloakbridge.documents.docx_processor import DocxProcessor
@@ -23,7 +23,8 @@ from cloakbridge.documents.xlsx_processor import XlsxProcessor
 from cloakbridge.domain.entities import EntityType, Finding
 from cloakbridge.domain.tokens import TokenMap
 from cloakbridge.gateway.token_prompt import build_token_handling_prompt
-from cloakbridge.gateway.providers import ProviderConfig
+from cloakbridge.gateway.leakage_guard import LeakageDetected, LeakageGuard
+from cloakbridge.gateway.providers import ProviderConfig, complete_with_provider
 from cloakbridge.storage.sqlite_store import SQLiteStore
 from cloakbridge.storage.vault import MappingVault
 
@@ -85,6 +86,12 @@ class RestoreTextRequest(BaseModel):
 
 class ValidateResponseRequest(RestoreTextRequest):
     pass
+
+
+class ChatSendRequest(BaseModel):
+    prompt: str
+    token_map: dict[str, str]
+    model_config_id: int | None = None
 
 
 class ModelConfigCreateRequest(BaseModel):
@@ -260,11 +267,88 @@ def validate_response(request: ValidateResponseRequest) -> dict[str, object]:
     }
 
 
+@router.post("/chat/send")
+def send_chat(request: ChatSendRequest) -> dict[str, object]:
+    store = _local_store()
+    try:
+        config = (
+            store.get_model_config(request.model_config_id)
+            if request.model_config_id is not None
+            else _first_enabled_model_config(store)
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Model config not found") from error
+
+    api_key = _local_vault().load_secret(str(config["secret_ref"])) if config.get("secret_ref") else ""
+    provider_config = ProviderConfig(
+        provider=str(config["provider"]),
+        model=str(config["model"]),
+        base_url=str(config["base_url"] or ""),
+        api_key=api_key,
+    )
+    guard = _leakage_guard_for_token_map(request.token_map)
+    try:
+        response = complete_with_provider(provider_config, request.prompt, guard)
+    except LeakageDetected as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Model gateway failed: {error}") from error
+
+    validation = _validate_tokens(response.sanitized_text, request.token_map)
+    restored_text = _restore_once(response.sanitized_text, request.token_map)
+    return {
+        "sanitized_text": response.sanitized_text,
+        "restored_text": restored_text,
+        "attachments": response.attachments,
+        "validation": {**validation, "restored_text": restored_text},
+    }
+
+
 def _restore_once(text: str, token_map: dict[str, str]) -> str:
     if not token_map:
         return text
     pattern = re.compile("|".join(re.escape(token) for token in sorted(token_map, key=len, reverse=True)))
     return pattern.sub(lambda match: token_map[match.group(0)], text)
+
+
+def _validate_tokens(sanitized_text: str, token_map: dict[str, str]) -> dict[str, list[str]]:
+    tokens = TOKEN_PATTERN.findall(sanitized_text)
+    return {
+        "unknown_tokens": sorted(
+            {token for token in tokens if VALID_TOKEN_PATTERN.fullmatch(token) and token not in token_map}
+        ),
+        "malformed_tokens": sorted({token for token in tokens if not VALID_TOKEN_PATTERN.fullmatch(token)}),
+        "generic_tokens": sorted(
+            {token for token in tokens if GENERIC_GROUP_PATTERN.fullmatch(token) and token in token_map}
+        ),
+    }
+
+
+def _leakage_guard_for_token_map(token_map: dict[str, str]) -> LeakageGuard:
+    entries = [
+        DictionaryEntry(original, _entity_type_for_token(token), "active-map", "confirmed")
+        for token, original in token_map.items()
+    ]
+    return LeakageGuard(DetectionPipeline(RegexDetector(), DictionaryMatcher(entries), DisabledLocalAI()))
+
+
+def _entity_type_for_token(token: str) -> EntityType:
+    if token.startswith("[[IP:") or token.startswith("[[IP_PREFIX:") or token.startswith("[[IP_RANGE:"):
+        return EntityType.IP_ADDRESS
+    if token.startswith("[[PRJ:"):
+        return EntityType.PROJECT
+    if token.startswith("[[ORG:"):
+        return EntityType.COMPANY
+    if token.startswith("[[PER:"):
+        return EntityType.PERSON
+    return EntityType.CUSTOM
+
+
+def _first_enabled_model_config(store: SQLiteStore) -> dict[str, object]:
+    configs = [config for config in store.list_model_configs() if config["enabled"]]
+    if not configs:
+        raise HTTPException(status_code=400, detail="No enabled model config")
+    return configs[0]
 
 
 def _local_store() -> SQLiteStore:
