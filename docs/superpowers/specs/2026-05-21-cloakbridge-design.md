@@ -11,6 +11,32 @@ CloakBridge is a local privacy gateway for office documents. It lets users send 
 
 The app creates sanitized versions of files, sends only sanitized content to external models, restores model responses locally, and keeps the original sensitive files, dictionaries, mappings, audit data, and logs on the user's device.
 
+## Experience Goal
+
+CloakBridge should feel like a local-first version of Codex or OpenCode for confidential office work.
+
+The user's main workflow should remain familiar:
+
+```text
+Upload files or type a task
+  -> send to AI
+  -> read the answer
+  -> continue the conversation
+  -> iterate on the result
+```
+
+The user should not need to change their normal AI work habits just because the content is sensitive. The only visible product difference from a normal AI workbench is a persistent right-side local desensitization and review panel.
+
+Core experience principles:
+
+- The center workspace is an AI conversation. It should behave like Codex or OpenCode: continuous chat history, file attachments, task composer at the bottom, model response rendering, and follow-up prompts.
+- Desensitization review is a safety sidecar, not the main workflow. It should be visible, trustworthy, and easy to inspect, but it should not turn every AI task into a long form.
+- The center conversation must not expose sensitive source text. External outbound content shown there must already be sanitized. Restored answers may be shown there after local restoration; sanitized answers remain available behind an expandable review/details control.
+- The right-side review panel owns local-only sensitive context: extracted source preview, highlighted sensitive spans, replacement tokens, confirmation state, manual additions, ignored false positives, and alias/entity merges.
+- Uploading `.txt`, `.docx`, or `.xlsx` should automatically trigger local extraction and review. Users should not need to understand the internal file-processing pipeline.
+- Repeated sensitive items should be grouped. A compact two-line review control should show the original sensitive item and its token, and one toggle should control every occurrence in the current job.
+- The product should always make the safe path the easy path: the send action should use sanitized content by default and run leakage checks before any external request.
+
 ## Non-Negotiable Principles
 
 - Original sensitive content must not be sent to external networks.
@@ -42,7 +68,7 @@ The app can be distributed as:
 - Linux package or AppImage.
 - Docker image for advanced users.
 
-The UI style should later take inspiration from the Codex App: quiet, professional, sidebar-driven, review-focused, and dense enough for real work.
+The UI style should take inspiration from Codex and OpenCode: quiet, professional, sidebar-driven, chat-first, and dense enough for real work. The primary surface should be a center AI conversation with a bottom composer. The local review surface should live in a right-side panel and should be clearly separated from external-model conversation history.
 
 ## First Version Scope
 
