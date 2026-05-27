@@ -68,6 +68,12 @@ export type ModelConfigInput = {
   api_key: string;
 };
 
+export type ModelOptions = {
+  base_url: string;
+  default_model: string;
+  models: string[];
+};
+
 export async function analyzeText(text: string) {
   const response = await fetch("/api/analyze-text", {
     method: "POST",
@@ -157,6 +163,16 @@ export async function createModelConfig(input: ModelConfigInput) {
   });
   if (!response.ok) throw new Error("保存模型配置失败");
   return (await response.json()) as ModelConfig;
+}
+
+export async function loadModelOptions(provider: string, api_key: string, base_url = "") {
+  const response = await fetch("/api/model-options", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, api_key, base_url }),
+  });
+  if (!response.ok) throw new Error("读取模型列表失败");
+  return (await response.json()) as ModelOptions;
 }
 
 export async function testModelConfig(id: number) {

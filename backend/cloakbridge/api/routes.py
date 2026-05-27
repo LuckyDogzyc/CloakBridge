@@ -24,7 +24,13 @@ from cloakbridge.domain.entities import EntityType, Finding
 from cloakbridge.domain.tokens import TokenMap
 from cloakbridge.gateway.token_prompt import build_token_handling_prompt
 from cloakbridge.gateway.leakage_guard import LeakageDetected, LeakageGuard
-from cloakbridge.gateway.providers import ProviderConfig, complete_with_provider
+from cloakbridge.gateway.providers import (
+    ProviderConfig,
+    complete_with_provider,
+    list_provider_models,
+    normalize_provider_config,
+    provider_preset,
+)
 from cloakbridge.storage.sqlite_store import SQLiteStore
 from cloakbridge.storage.vault import MappingVault
 
@@ -102,6 +108,12 @@ class ModelConfigCreateRequest(BaseModel):
     api_key: str = ""
 
 
+class ModelOptionsRequest(BaseModel):
+    provider: str
+    api_key: str = ""
+    base_url: str = ""
+
+
 @router.post("/analyze-text")
 def analyze_text(request: AnalyzeTextRequest) -> dict[str, object]:
     entries = [
@@ -133,16 +145,21 @@ def list_alias_groups(scope: str | None = None) -> dict[str, object]:
 @router.post("/model-configs")
 def create_model_config(request: ModelConfigCreateRequest) -> dict[str, object]:
     try:
-        ProviderConfig(provider=request.provider, model=request.model, base_url=request.base_url or None)
+        normalized = normalize_provider_config(
+            provider=request.provider,
+            model=request.model,
+            base_url=request.base_url,
+            api_key=request.api_key or None,
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     store = _local_store()
     config = store.create_model_config(
         name=request.name.strip(),
-        provider=request.provider,
-        model=request.model.strip(),
-        base_url=request.base_url.strip(),
+        provider=normalized.provider,
+        model=normalized.model,
+        base_url=normalized.base_url or "",
     )
     if request.api_key.strip():
         secret_ref = f"model-config-{config['id']}"
@@ -153,6 +170,26 @@ def create_model_config(request: ModelConfigCreateRequest) -> dict[str, object]:
             _mask_api_key(request.api_key.strip()),
         )
     return _public_model_config(config)
+
+
+@router.post("/model-options")
+def model_options(request: ModelOptionsRequest) -> dict[str, object]:
+    preset = provider_preset(request.provider)
+    try:
+        config = normalize_provider_config(
+            provider=request.provider,
+            model=preset["default_model"],
+            base_url=request.base_url or preset["base_url"],
+            api_key=request.api_key or None,
+        )
+        models = list_provider_models(config) if request.api_key.strip() else []
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Model list failed: {error}") from error
+    return {
+        "base_url": config.base_url or "",
+        "default_model": config.model,
+        "models": models or ([config.model] if config.model else []),
+    }
 
 
 @router.get("/model-configs")
@@ -176,8 +213,25 @@ def test_model_config(config_id: int) -> dict[str, object]:
     if not config["secret_ref"]:
         raise HTTPException(status_code=400, detail="API key is required")
 
-    _local_vault().load_secret(str(config["secret_ref"]))
-    return {"ok": True, "message": "配置可用", "provider": config["provider"], "model": config["model"]}
+    api_key = _local_vault().load_secret(str(config["secret_ref"]))
+    try:
+        provider_config = ProviderConfig(
+            provider=str(config["provider"]),
+            model=str(config["model"]),
+            base_url=str(config["base_url"] or ""),
+            api_key=api_key,
+        )
+        models = list_provider_models(provider_config)
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Model test failed: {error}") from error
+    if models and config["model"] not in models:
+        raise HTTPException(status_code=400, detail=f"Model not available: {config['model']}")
+    return {
+        "ok": True,
+        "message": f"配置可用，已读取 {len(models)} 个模型" if models else "配置可用",
+        "provider": config["provider"],
+        "model": config["model"],
+    }
 
 
 @router.post("/sanitize-text")

@@ -140,6 +140,7 @@ def test_api_persists_alias_groups_in_local_store(tmp_path, monkeypatch):
 
 def test_api_saves_lists_and_tests_local_model_configs(tmp_path, monkeypatch):
     monkeypatch.setenv("CLOAKBRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("cloakbridge.api.routes.list_provider_models", lambda config: [config.model])
     client = TestClient(app)
 
     created = client.post(
@@ -169,6 +170,43 @@ def test_api_saves_lists_and_tests_local_model_configs(tmp_path, monkeypatch):
     tested = client.post(f"/api/model-configs/{payload['id']}/test")
     assert tested.status_code == 200
     assert tested.json()["ok"] is True
+
+
+def test_api_applies_glm_provider_preset_and_lists_available_models(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOAKBRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "cloakbridge.api.routes.list_provider_models",
+        lambda config: ["glm-5.1", "glm-5", "glm-4.5-air"],
+    )
+    client = TestClient(app)
+
+    options = client.post(
+        "/api/model-options",
+        json={"provider": "glm", "api_key": "sk-local-secret"},
+    )
+
+    assert options.status_code == 200
+    assert options.json() == {
+        "base_url": "https://api.z.ai/api/paas/v4",
+        "default_model": "glm-5.1",
+        "models": ["glm-5.1", "glm-5", "glm-4.5-air"],
+    }
+
+    created = client.post(
+        "/api/model-configs",
+        json={
+            "name": "GLM 主模型",
+            "provider": "glm",
+            "model": "",
+            "base_url": "",
+            "api_key": "sk-local-secret",
+        },
+    )
+
+    assert created.status_code == 200
+    payload = created.json()
+    assert payload["model"] == "glm-5.1"
+    assert payload["base_url"] == "https://api.z.ai/api/paas/v4"
 
 
 def test_api_sends_sanitized_prompt_and_restores_model_response(tmp_path, monkeypatch):

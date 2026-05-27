@@ -21,6 +21,17 @@ SUPPORTED_PROVIDERS = {
     "custom-anthropic",
 }
 
+PROVIDER_PRESETS = {
+    "glm": {
+        "base_url": "https://api.z.ai/api/paas/v4",
+        "default_model": "glm-5.1",
+    },
+    "minimax": {
+        "base_url": "https://api.minimax.chat/v1",
+        "default_model": "MiniMax-M1",
+    },
+}
+
 
 @dataclass(frozen=True)
 class ProviderConfig:
@@ -106,11 +117,59 @@ def complete_with_provider(
     return ChatCompletionsProvider(config).complete(sanitized_prompt, leakage_guard)
 
 
+def provider_preset(provider: str) -> dict[str, str]:
+    return PROVIDER_PRESETS.get(provider, {"base_url": "", "default_model": ""})
+
+
+def normalize_provider_config(provider: str, model: str, base_url: str, api_key: str | None = None) -> ProviderConfig:
+    preset = provider_preset(provider)
+    return ProviderConfig(
+        provider=provider,
+        model=model.strip() or preset["default_model"],
+        base_url=base_url.strip() or preset["base_url"],
+        api_key=api_key,
+    )
+
+
+def list_provider_models(config: ProviderConfig) -> list[str]:
+    if not config.base_url:
+        return [config.model] if config.model else []
+    if not config.api_key:
+        return [config.model] if config.model else []
+
+    response = httpx.get(
+        _models_url(config.base_url),
+        headers={"Authorization": f"Bearer {config.api_key}"},
+        timeout=30,
+    )
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        detail = response.text[:500]
+        raise RuntimeError(f"Provider returned {response.status_code}: {detail}") from error
+    payload = response.json()
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return [config.model] if config.model else []
+    models = []
+    for item in data:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            models.append(item["id"])
+    return models
+
+
 def _chat_completions_url(base_url: str) -> str:
     trimmed = base_url.rstrip("/")
     if trimmed.endswith("/chat/completions"):
         return trimmed
     return f"{trimmed}/chat/completions"
+
+
+def _models_url(base_url: str) -> str:
+    trimmed = base_url.rstrip("/")
+    if trimmed.endswith("/models"):
+        return trimmed
+    return f"{trimmed}/models"
 
 
 def _extract_chat_text(payload: dict[str, object]) -> str:

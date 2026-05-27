@@ -26,18 +26,32 @@ test("model view saves and tests a local provider config", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/model-options" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        expect(body.provider).toBe("glm");
+        expect(body.api_key).toBe("sk-local-secret");
+        return new Response(
+          JSON.stringify({
+            base_url: "https://api.z.ai/api/paas/v4",
+            default_model: "glm-5.1",
+            models: ["glm-5.1", "glm-4.5-air"],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       if (url === "/api/model-configs" && init?.method === "POST") {
         const body = JSON.parse(String(init.body));
         expect(body.provider).toBe("glm");
-        expect(body.model).toBe("glm-4-flash");
+        expect(body.model).toBe("glm-5.1");
+        expect(body.base_url).toBe("https://api.z.ai/api/paas/v4");
         expect(body.api_key).toBe("sk-local-secret");
         return new Response(
           JSON.stringify({
             id: 7,
             name: "智谱主模型",
             provider: "glm",
-            model: "glm-4-flash",
-            base_url: "https://open.bigmodel.cn/api/paas/v4",
+            model: "glm-5.1",
+            base_url: "https://api.z.ai/api/paas/v4",
             masked_api_key: "sk-****cret",
             enabled: true,
           }),
@@ -62,11 +76,11 @@ test("model view saves and tests a local provider config", async () => {
 
   fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "智谱主模型" } });
   fireEvent.change(screen.getByLabelText("模型供应商"), { target: { value: "glm" } });
-  fireEvent.change(screen.getByLabelText("模型 ID"), { target: { value: "glm-4-flash" } });
-  fireEvent.change(screen.getByLabelText("Base URL"), {
-    target: { value: "https://open.bigmodel.cn/api/paas/v4" },
-  });
+  expect(screen.queryByLabelText("Base URL")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("模型 ID")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "sk-local-secret" } });
+  fireEvent.click(screen.getByRole("button", { name: "读取模型列表" }));
+  await waitFor(() => expect(screen.getByLabelText("模型")).toHaveValue("glm-5.1"));
   fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
 
   await waitFor(() => expect(screen.getByText("智谱主模型")).toBeInTheDocument());
