@@ -25,7 +25,9 @@ function findingKey(finding: Finding, index: number) {
 export function App() {
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [activeView, setActiveView] = useState<AppView>("review");
-  const [text, setText] = useState("华东三期项目服务器10.18.2.4");
+  const [text, setText] = useState("");
+  const [promptText, setPromptText] = useState("");
+  const [filePreviewText, setFilePreviewText] = useState("");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [activeKeys, setActiveKeys] = useState<Record<string, boolean>>({});
   const [sanitized, setSanitized] = useState("");
@@ -35,6 +37,7 @@ export function App() {
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [reviewAliasGroups, setReviewAliasGroups] = useState<AliasGroupInput[]>([]);
   const [mergeStatus, setMergeStatus] = useState("");
+  const [lastAnalyzedText, setLastAnalyzedText] = useState("");
 
   const replacementByOriginal = useMemo(() => {
     return Object.fromEntries(Object.entries(tokenMap).map(([token, original]) => [original, token]));
@@ -42,15 +45,27 @@ export function App() {
 
   async function runAnalysis() {
     const analysis = await analyzeText(text);
-    setFindings(analysis.findings);
-    activateFindings(analysis.findings);
+    const nextFindings = Array.isArray(analysis.findings) ? analysis.findings : [];
+    setFindings(nextFindings);
+    activateFindings(nextFindings);
+    setLastAnalyzedText(text);
+    return nextFindings;
   }
 
   async function runSanitize() {
-    const selectedFindings = findings.filter((finding, index) => activeKeys[findingKey(finding, index)] !== false);
+    if (!text.trim()) return;
+    const currentFindings = lastAnalyzedText === text ? findings : await runAnalysis();
+    const currentActiveKeys =
+      lastAnalyzedText === text
+        ? activeKeys
+        : Object.fromEntries(currentFindings.map((finding, index) => [findingKey(finding, index), true]));
+    const selectedFindings = currentFindings.filter(
+      (finding, index) => currentActiveKeys[findingKey(finding, index)] !== false,
+    );
     const result = await sanitizeText(text, selectedFindings, reviewAliasGroups);
     setSanitized(result.sanitized_text);
     setTokenMap(result.token_map);
+    setValidation(null);
   }
 
   async function runFileSanitize(files: File[]) {
@@ -61,9 +76,11 @@ export function App() {
     setTokenMap(result.token_map);
     const firstPreview = result.files[0];
     if (firstPreview) {
-      setText(firstPreview.preview_text);
+      setFilePreviewText(firstPreview.preview_text);
+      setText([promptText, firstPreview.preview_text].filter(Boolean).join("\n\n"));
       setFindings(firstPreview.findings);
       activateFindings(firstPreview.findings);
+      setLastAnalyzedText(firstPreview.preview_text);
       setSanitized(firstPreview.sanitized_preview);
       setValidation(null);
     }
@@ -71,6 +88,17 @@ export function App() {
 
   function handleFilesSelected(files: File[]) {
     void runFileSanitize(files);
+  }
+
+  function handlePromptChange(value: string) {
+    setPromptText(value);
+    setText([value, filePreviewText].filter(Boolean).join("\n\n"));
+    setSanitized("");
+    setTokenMap({});
+    setValidation(null);
+    setLastAnalyzedText("");
+    setFindings([]);
+    setActiveKeys({});
   }
 
   async function runResponseValidation() {
@@ -140,10 +168,7 @@ export function App() {
               <p>规则先扫一遍，本地中文模型再判断，确认后才把脱敏内容交给外部模型。</p>
             </div>
             <div className="toolbar">
-              <button onClick={runAnalysis} type="button">
-                分析
-              </button>
-              <button className="primary-action" onClick={runSanitize} type="button">
+              <button className="primary-action" disabled={!text.trim()} onClick={runSanitize} type="button">
                 脱敏
               </button>
             </div>
@@ -153,7 +178,9 @@ export function App() {
               files={selectedFiles}
               job={fileJob}
               onFilesSelected={handleFilesSelected}
+              onPromptChange={handlePromptChange}
               onValidate={() => void runResponseValidation()}
+              promptText={promptText}
               sanitized={sanitized}
               tokenMap={tokenMap}
               validation={validation}

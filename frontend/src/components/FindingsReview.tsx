@@ -60,7 +60,7 @@ export function FindingsReview({
             </button>
           );
         })}
-        {findings.length === 0 ? <div className="empty-state">运行分析后，候选敏感项会出现在这里。</div> : null}
+        {findings.length === 0 ? <div className="empty-state">脱敏后，候选敏感项会出现在这里。</div> : null}
       </div>
     </section>
   );
